@@ -1,0 +1,14 @@
+#python packages
+fastapi
+uvicorn
+pydantic
+python-multipart
+httpx
+notebook
+
+#google cloud sdks
+google-cloud-documentai
+google-cloud-storage
+google-cloud-firestore
+
+
