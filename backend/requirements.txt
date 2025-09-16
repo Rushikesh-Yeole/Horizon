@@ -4,11 +4,20 @@ uvicorn
 pydantic
 python-multipart
 httpx
+
 notebook
+dotenv
+
+pymupdf
+pymupdf4llm
+
+pandas
+numpy
 
 #google cloud sdks
 google-cloud-documentai
 google-cloud-storage
 google-cloud-firestore
+google-cloud-aiplatform
 
 
