@@ -11,7 +11,7 @@ def insert_user_to_db(user_data: dict,confirm_pending):
         else:
             user_data["confirm_pending"] = False
         user_data["personality_ready"] = False
-        doc_ref,_ = db.collection("users").add(user_data)
+        update_time,doc_ref = db.collection("users").add(user_data)
         print(f"user successfully inserted {doc_ref.id}")
         return doc_ref.id
     except Exception as e:

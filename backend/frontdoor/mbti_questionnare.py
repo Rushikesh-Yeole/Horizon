@@ -1,5 +1,7 @@
 from google.cloud import firestore
 
+from typing import Dict
+
 import pandas as pd
 import numpy as np
 import random
@@ -53,18 +55,17 @@ def prepare_questions():
     print(ques_list)
     return ques_list
     
-def evaluate_answers(user_answers):
+def evaluate_answers(user_answers: Dict[str,int]):
     #input data : {TYPE,SCORE}
 
     # strongly agree: 5 , strongly disagree: 1
 
     personality = {}
-    for entry in user_answers:
-        for key,value in entry.items():
-            if key not in personality.keys():
-                personality[key] = value
-            else:
-                personality[key] += value
+    for key,value in user_answers.items():
+        if key not in personality:
+            personality[key] = value
+        else:
+            personality[key] += value
 
     user_pers = []
     max_val = 0
