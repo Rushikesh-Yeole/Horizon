@@ -5,14 +5,20 @@ pydantic
 python-multipart
 httpx
 
+#env
 notebook
 dotenv
 
+#pdf parsing
 pymupdf
 pymupdf4llm
 
+#ds
 pandas
 numpy
+
+#scraping
+beautifulsoup4
 
 #google cloud sdks
 google-cloud-documentai

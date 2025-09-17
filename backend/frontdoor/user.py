@@ -1,7 +1,6 @@
 from google.cloud import firestore
 
 
-
 db = firestore.Client(database="hackathonfirestore")
 
 def insert_user_to_db(user_data: dict,confirm_pending):

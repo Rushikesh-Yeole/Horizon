@@ -1,5 +1,3 @@
-
-from google.cloud import documentai_v1 as documentai
 from vertexai.generative_models import GenerativeModel
 from google.cloud import storage
 
@@ -19,6 +17,7 @@ import requests
 import json
 import tempfile
 from datetime import timedelta
+
 
 load_dotenv()
 PROJECT_ID = os.getenv("GOOGLE_PROJECT_ID")

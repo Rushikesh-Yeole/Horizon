@@ -56,7 +56,7 @@ def prepare_questions():
     return ques_list
     
 def evaluate_answers(user_answers: Dict[str,int]):
-    #input data : {TYPE,SCORE}
+    #input data : {"type":score(int)}
 
     # strongly agree: 5 , strongly disagree: 1
 
