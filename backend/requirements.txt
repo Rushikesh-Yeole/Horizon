@@ -26,4 +26,5 @@ google-cloud-storage
 google-cloud-firestore
 google-cloud-aiplatform
 
-
+#mongodb
+pymongo

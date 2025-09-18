@@ -3,10 +3,11 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List,Any,Dict
 
-from parse_resume import parse_resume,upload_resume_to_cloud,merge_resume_with_user
-from mbti_questionnare import prepare_questions,evaluate_answers
-from user import insert_user_to_db,get_user,mark_user_onboarded,update_user_personality
+from .frontdoor.parse_resume import parse_resume,upload_resume_to_cloud,merge_resume_with_user
+from .frontdoor.mbti_questionnare import prepare_questions,evaluate_answers
+from .frontdoor.user import insert_user_to_db,get_user,mark_user_onboarded,update_user_personality
 
+from.job_listings.list_jobs_scraper import local_parser_pipeline,write_to_db
 
 app = FastAPI()
 
@@ -71,3 +72,18 @@ async def process_answers(user_id:str, answers: Answers):
     update_user_personality(user_id,personality)
     return JSONResponse({"personality":personality},status_code=200)
 
+@app.post("/jobs/parse")
+async def parse_locally():
+    try:
+        local_parser_pipeline()
+        return JSONResponse({"message":"parsed and stored locally"},status_code=200)
+    except Exception as e:
+        return JSONResponse({"error":f"error during parsing jobs {str(e)}"},status_code=500)
+
+@app.post("/jobs/write")
+async def write_jobs_db():
+    try:
+        write_to_db()
+        return JSONResponse({"message":"written to db"},status_code=200)
+    except Exception as e:
+        return JSONResponse({"error":f"error during writing jobs to mongodb: {str(e)}"},status_code=500)
