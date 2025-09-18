@@ -1,0 +1,3 @@
+mongodb
+skillsKB	rishi	fnn59kAX63YP7HE4	mongodb+srv://rishi:fnn59kAX63YP7HE4@skillskb.21deuhb.mongodb.net/?retryWrites=true&w=majority&appName=skillsKB
+            shashwat    Wk4UK4EAVzGSQAAV    mongodb+srv://shashwat:Wk4UK4EAVzGSQAAV@skillskb.21deuhb.mongodb.net/?retryWrites=true&w=majority&appName=skillsKB
