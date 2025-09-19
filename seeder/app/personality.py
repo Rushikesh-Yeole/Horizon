@@ -1,4 +1,3 @@
-# seeder_minimal.py
 import os
 import logging
 import pandas as pd
@@ -7,6 +6,10 @@ from fastapi import FastAPI
 from rapidfuzz import process, fuzz
 from dotenv import load_dotenv
 from typing import Dict, Any, List, Tuple, Optional
+import re
+from urllib.parse import urlparse
+from fastapi import Query
+
 
 load_dotenv()
 logging.basicConfig(level=logging.INFO)
@@ -20,6 +23,7 @@ mongo = AsyncIOMotorClient(MONGODB_URI)
 db = mongo[DB_NAME]
 domains_col = db["domains"]
 personality_col = db["personality"]
+jobs_col = mongo["job_listings"]["jobs"]
 
 app = FastAPI(title="Minimal O*NET Personality Seeder (fixed)")
 
@@ -129,11 +133,10 @@ def compute_big5(ws_row: Dict[str, float]) -> Dict[str, float]:
 def big5_to_mbti(big5: Dict[str, float]) -> Dict[str, float]:
     return {
         "E": round(big5.get("Extraversion", 0.5), 3),
-        "S": round(1 - big5.get("Openness", 0.5), 3),
-        "T": round(1 - big5.get("Agreeableness", 0.5), 3),
-        "J": round(big5.get("Conscientiousness", 0.5), 3),
+        "N": round(big5.get("Openness", 0.5), 3),
+        "F": round(big5.get("Agreeableness", 0.5), 3),
+        "P": round(1 - big5.get("Conscientiousness", 0.5), 3),
     }
-
 
 def fuzzy_matches_for_job(domain_job: str, limit: Optional[int] = 5) -> List[Tuple[str, float]]:
     matches = process.extract(
@@ -176,7 +179,7 @@ async def seed_job(domain_job: str) -> Optional[Dict[str, Any]]:
         matches_array.append({
             "title": match_title,
             "mbti": mbti,
-            "score": round(float(score), 1)
+            "fuzzy": round(float(score), 1)
         })
 
     if not matches_array:
@@ -251,15 +254,204 @@ async def fuzzy_matches(limit_per_job: int = 5):
     return {"total_jobs": len(matches_dict), "total_matches_found": total_matches, "matches": matches_dict}
 
 
-@app.get("/personalities")
-async def all_personalities(limit: int = 1000):
-    docs = await personality_col.find({}, {"_id": 0}).to_list(length=limit)
+@app.get("/getDocs")
+async def all_personalities(doc: str):
+    if doc=="skills":
+        docs = await db["skills"].find({}, {"_id": 0}).to_list(length=1000)
+    elif doc=="domains":
+        docs = await domains_col.find({}, {"_id": 0}).to_list(length=1000)
+    elif doc=="jobs":
+        docs = await mongo["job_listings"]["jobs"].find({}, {"_id": 0}).to_list(length=1000)
+    else:
+        docs = await personality_col.find({}, {"_id": 0}).to_list(length=1000)
     return docs
 
 
 @app.get("/count")
 async def skills_count():
     skills_count = await db["skills"].count_documents({})
+    jl_count = await mongo["job_listings"]["jobs"].count_documents({})
     domain_count = await domains_col.count_documents({})
     jobs_count = await personality_col.count_documents({})
-    return {"total skills": skills_count, "total domains": domain_count, "total jobs": jobs_count}
+    return {"total skills": skills_count, "total domains": domain_count, "total jobs": jobs_count, "total JLs": jl_count}
+
+@app.get("/delDb")
+async def drop_collection(name: str):
+    await db[name].drop()
+    return {"dropped": name}
+
+@app.get("/refactor")
+async def refactor():
+    count = 0
+    cursor = db["skills"].find({"skill_id": None})
+    async for doc in cursor:
+        name = doc.get("name")
+        if name:
+            new_skill_id = f"skill_{name.lower()}"
+            await db["skills"].update_one(
+                {"_id": doc["_id"]},
+                {"$set": {"skill_id": new_skill_id}}
+            )
+            count += 1
+    return {"updated_docs": count}
+
+# --- job titles cleanser ------------|
+
+# ---- small helpers (minimal, robust) ----
+COMMON_CORP_SUFFIXES = {"inc","inc.","llc","ltd","ltd.","co","co.","corp","corp.","corporation","company","gmbh","sa","plc"}
+SEPARATORS_RE = re.compile(r'[\-\|•\—\–\:,\@]')
+
+def hostname_to_company_candidate(url: str):
+    if not url:
+        return None
+    try:
+        host = (urlparse(url).hostname or "").lower()
+    except:
+        host = url.lower()
+    host = host.lstrip("www.")
+    if not host:
+        return None
+    parts = host.split(".")
+    # drop common prefixes like careers, jobs, apply
+    while parts and parts[0] in ("careers","jobs","apply","work","staffing"):
+        parts.pop(0)
+    if not parts:
+        return None
+    # prefer the second-last token (domain) but handle multi-level ccTLDs
+    token = parts[-2] if len(parts) >= 2 else parts[0]
+    if len(parts) >= 3 and parts[-2] in ("co","com","org","net","gov","ac"):
+        token = parts[-3]
+    token = re.sub(r'[^a-z0-9\-]', '', token)
+    return token.title() if token else None
+
+def normalize_company_name(s: str):
+    if not s:
+        return None
+    s2 = re.sub(r'[^\w\s&\.-]', ' ', s).strip()
+    parts = [p for p in re.split(r'\s+', s2) if p]
+    while parts and parts[-1].lower().rstrip('.') in COMMON_CORP_SUFFIXES:
+        parts.pop()
+    return " ".join(parts).strip() if parts else None
+
+def find_company_in_title_by_patterns(title: str):
+    if not title:
+        return None
+    chunks = [c.strip() for c in re.split(SEPARATORS_RE, title) if c.strip()]
+    if len(chunks) >= 2:
+        # last chunk often is company: "Software Engineer - Google Cloud"
+        return chunks[-1]
+    m = re.search(r'\b(at|@)\s+(.+)$', title, flags=re.I)
+    if m:
+        return m.group(2).strip()
+    m = re.search(r'\(([^)]+)\)\s*$', title)
+    if m:
+        return m.group(1).strip()
+    return None
+
+def remove_company_from_title(title: str, company: str):
+    if not title or not company:
+        return title
+    pattern = re.compile(r'(\s*[\-\|\:\,\@\•\—\–]?\s*)' + re.escape(company), flags=re.I)
+    new = pattern.sub('', title)
+    new = re.sub(r'\bat\s+' + re.escape(company) + r'\b', '', new, flags=re.I)
+    new = re.sub(r'^[\s\-\|\:\,]+', '', new)
+    new = re.sub(r'[\s\-\|\:\,]+$', '', new)
+    return new.strip()
+
+def detect_company(title: str, apply_link: str):
+    """
+    Returns (company_or_None, cleaned_title, confidence_float[0..1])
+    """
+    domain_cand = hostname_to_company_candidate(apply_link)
+    title_cand = find_company_in_title_by_patterns(title)
+    domain_norm = normalize_company_name(domain_cand) if domain_cand else None
+    title_norm = normalize_company_name(title_cand) if title_cand else None
+
+    if domain_norm and title_norm:
+        # If tokens overlap, very confident
+        if domain_norm.lower() in title_norm.lower() or title_norm.lower() in domain_norm.lower():
+            company = title_norm if len(title_norm) >= len(domain_norm) else domain_norm
+            cleaned = remove_company_from_title(title, company)
+            return company, cleaned, 0.95
+        # both present but different -> prefer title-extracted but lower confidence
+        company = title_norm
+        cleaned = remove_company_from_title(title, company)
+        return company, cleaned, 0.7
+
+    if title_norm:
+        cleaned = remove_company_from_title(title, title_norm)
+        return title_norm, cleaned, 0.8
+
+    if domain_norm:
+        # if domain token also present in title -> high confidence and remove it
+        if re.search(r'\b' + re.escape(domain_norm) + r'\b', title, flags=re.I):
+            cleaned = remove_company_from_title(title, domain_norm)
+            return domain_norm, cleaned, 0.9
+        # domain-derived only (leave title unchanged)
+        return domain_norm, title, 0.5
+
+    return None, title, 0.0
+
+# ---- endpoint ----
+@app.post("/jobs/cleanse")
+async def extract_company_async(
+    min_confidence: float = Query(0.8, description="min confidence to modify title"),
+    batch_size: int = Query(200, description="max docs to scan"),
+    dry_run: bool = Query(True, description="if true, do not persist updates")
+):
+    scanned = updated = inserted_company = modified_title = 0
+    examples = []
+    cursor = jobs_col.find({}, limit=batch_size)
+
+    async for doc in cursor:
+        scanned += 1
+        title = doc.get("title", "") or ""
+        apply_link = doc.get("apply_link", "") or doc.get("url", "") or ""
+        current_company = doc.get("company")
+
+        # run existing detector
+        company_from_title, cleaned_title, confidence = detect_company(title, apply_link)
+
+        # ALWAYS derive company from hostname (domain fallback)
+        domain_cand = hostname_to_company_candidate(apply_link)
+        domain_norm = normalize_company_name(domain_cand) if domain_cand else None
+
+        updates = {}
+
+        # always set company from domain if available and different
+        if domain_norm and current_company != domain_norm:
+            updates["company"] = domain_norm
+
+        # if title-based detection is confident, prefer it for title cleaning and company
+        if company_from_title and confidence >= float(min_confidence):
+            if cleaned_title and cleaned_title != title:
+                updates["title"] = cleaned_title
+            if company_from_title != domain_norm and current_company != company_from_title:
+                updates["company"] = company_from_title
+
+        if updates:
+            if not dry_run:
+                await jobs_col.update_one({"_id": doc["_id"]}, {"$set": updates})
+            updated += 1
+            if "company" in updates:
+                inserted_company += 1
+            if "title" in updates:
+                modified_title += 1
+            if len(examples) < 20:
+                examples.append({
+                    "doc_id": str(doc.get("_id")),
+                    "old_title": title,
+                    "new_title": updates.get("title", title),
+                    "company": updates.get("company", current_company),
+                    "confidence": round(confidence, 2)
+                })
+
+    return {
+        "dry_run": dry_run,
+        "batch_size": batch_size,
+        "scanned": scanned,
+        "updated_docs": updated,
+        "inserted_company_count": inserted_company,
+        "modified_title_count": modified_title,
+        "examples": examples
+    }

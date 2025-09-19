@@ -1,1 +1,1 @@
-uvicorn app.main:app
+uvicorn app.personality:app --reload
