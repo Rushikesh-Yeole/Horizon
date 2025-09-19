@@ -6,6 +6,10 @@ import os
 import asyncio
 import re
 
+from frontdoor.user import normalized_aliases,normalized_rel_skills,normalized_skills
+
+from rapidfuzz import fuzz,process
+
 from pymongo import MongoClient
 
 from dotenv import load_dotenv
@@ -194,6 +198,48 @@ Return a JSON array:
         print(f"exception while enriching job content {str(e)}")
         raise
 
+def normalize_job_skills(extracted_skills,threshold=60):
+   
+    cleaned_skills = []
+    for skill in extracted_skills:
+        print(f"current skill : {skill}")
+        match, score, _ = process.extractOne(skill, normalized_skills, scorer=fuzz.ratio)
+        if score >= threshold:
+            print(f"found! match: {match}, score: {score}")
+            cleaned_skills.append(match)
+            continue  
+
+        print("checking in aliases")
+        found = False
+        for n_skill, aliases in normalized_aliases.items():
+            if not aliases:
+                continue
+            match, score, _ = process.extractOne(skill, aliases, scorer=fuzz.ratio)
+            if score >= threshold:
+                print(f"found! match: {match}, score: {score}")
+                cleaned_skills.append(n_skill)  
+                found = True
+                break
+        if found:
+            continue  
+
+        print("checking in related skills")
+        for n_skill, related in normalized_rel_skills.items():
+            if not related:
+                continue
+            match, score, _ = process.extractOne(skill, related, scorer=fuzz.ratio)
+            if score >= threshold:
+                print(f"found! match: {match}, score: {score}")
+                cleaned_skills.append(n_skill)  
+                found=True
+                break  
+        if not found:
+            print(f"skill: {skill} not found in KB")
+            
+    print(len(cleaned_skills))
+    return cleaned_skills
+
+
 def write_to_db():
     try:
         client = MongoClient(os.getenv("MONGODB_URI"))
@@ -204,7 +250,11 @@ def write_to_db():
         with open(final_jobs_path,'r') as f:
             json_data = json.load(f)
         print("INFO: file data loaded")
-
+        for job_entry in json_data:
+            job_skills = job_entry["skills"]
+            updated_skills = normalize_job_skills(job_skills)
+            job_entry["skills"] = updated_skills
+        
         if isinstance(json_data,list):
             result = collection.insert_many(json_data)
             print(f"inserted {len(result.inserted_ids)} docs")
@@ -213,7 +263,6 @@ def write_to_db():
             print(f"inserted one doc with id {result.inserted_id}")
         for doc in collection.find().limit(5):
             print(doc)
-
     except Exception as e:
         print(f"ERROR: during writing jobs to mongodb {str(e)}")
         raise

@@ -28,3 +28,10 @@ google-cloud-aiplatform
 
 #mongodb
 pymongo
+
+#fuzzy finder
+rapidfuzz
+
+#auth
+python-jose
+passlib
