@@ -1,2 +1,19 @@
+
 /seeder/.env
 /jobForge/.env
+
+#env
+/seeder/.env
+/backend/.env
+
+#pycache
+__pycache__
+
+#testing files
+/backend/test.ipynb
+
+#data and external files
+data
+external
+testing
+

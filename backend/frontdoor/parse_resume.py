@@ -20,7 +20,7 @@ import json
 import tempfile
 from datetime import timedelta
 
-from user import normalize_skills
+from .user import normalize_skills
 
 load_dotenv()
 PROJECT_ID = os.getenv("GOOGLE_PROJECT_ID")
@@ -151,7 +151,7 @@ def merge_resume_with_user(user: dict, parsed_resume: dict, resume_url: str):
 
         skills_list = normalize_skills(skills_list)
         user_data["skills"] = skills_list
-        
+
         projects = user_data.get("projects", [])
         if len(projects) < MAX_PROJECT_SLOTS:
             print("updating projects...")

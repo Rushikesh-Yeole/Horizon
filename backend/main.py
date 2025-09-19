@@ -9,9 +9,9 @@ from dotenv import load_dotenv
 import os
 load_dotenv()
 
-from .frontdoor.parse_resume import parse_resume,upload_resume_to_cloud,merge_resume_with_user
-from .frontdoor.mbti_questionnare import prepare_questions,evaluate_answers
-from .frontdoor.user import insert_user_to_db,update_user_personality
+from frontdoor.parse_resume import parse_resume,upload_resume_to_cloud,merge_resume_with_user
+from frontdoor.mbti_questionnare import prepare_questions,evaluate_answers
+from frontdoor.user import insert_user_to_db,update_user_personality
 
 from auth import hash_password, verify_password, create_access_token, decode_access_token
 
