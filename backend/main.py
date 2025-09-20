@@ -1,7 +1,7 @@
 from fastapi import FastAPI,UploadFile,File,HTTPException
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from typing import List,Any,Dict
+from typing import List,Any,Dict,Optional
 
 from pymongo import MongoClient
 from bson.objectid import ObjectId
@@ -9,11 +9,13 @@ from dotenv import load_dotenv
 import os
 load_dotenv()
 
-from frontdoor.parse_resume import parse_resume,upload_resume_to_cloud,merge_resume_with_user,get_resume_url
+from frontdoor.parse_resume import parse_resume,upload_resume_to_cloud,get_resume_url
 from frontdoor.mbti_questionnare import prepare_questions,evaluate_answers
-from frontdoor.user import insert_user_to_db,update_user_personality
+from frontdoor.user import insert_user_to_db
 
-from auth import hash_password, verify_password, create_access_token, decode_access_token
+from normalizer.normalizer import normalize_skills
+
+from auth import hash_password, verify_password, create_access_token
 
 app = FastAPI()
 
@@ -40,10 +42,9 @@ class UserForm(BaseModel):
     education: List[Education]
     skills: List[str]
     projects: List[Project]
-    personality: Dict[str,int] #calculated by backend, cant be modified
-    resume_link: str #not visible in form
-    bucket: str #not visible
-    destination_blob: str #not visible 
+    personality: Dict[str,float] #calculated by backend, cant be modified
+    bucket: Optional[str]=None #not visible
+    destination_blob: Optional[str]=None #not visible 
     password: str
 
 class LoginRequest(BaseModel):
@@ -58,6 +59,11 @@ class Answers(BaseModel):
 async def register_user(user: UserForm):
     user_data = user.model_dump(exclude_none=True)
     user_data["password"] = hash_password(user.password)
+    
+    user_skills = user_data.get("skills",[])
+    if user_skills != []:
+        cleaned_skills = normalize_skills(user_skills)
+        user_data["skills"] = cleaned_skills
     
     if(user_data["personality"]=={}):
         return JSONResponse({"message":"user must complete MBTI questionnare first"},status_code=400)

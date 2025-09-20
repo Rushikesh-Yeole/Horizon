@@ -22,7 +22,7 @@ from datetime import timedelta
 
 import uuid
 
-from .user import normalize_skills
+from normalizer.normalizer import normalize_skills
 
 load_dotenv()
 PROJECT_ID = os.getenv("GOOGLE_PROJECT_ID")
@@ -48,7 +48,12 @@ def res_to_json(res_content: str):
             # fallback: assume whole response is JSON
             json_str = res_content.strip()
 
-        return json.loads(json_str)
+        json_content = json.loads(json_str)
+        skills = json_content["skills"]
+        cleaned_skills = normalize_skills(skills)
+        json_content["skills"] = cleaned_skills
+        
+        return json_content
     except Exception as e:
         print(f"json parse error: {str(e)}")
         raise
