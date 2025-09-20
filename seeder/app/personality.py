@@ -15,12 +15,11 @@ load_dotenv()
 logging.basicConfig(level=logging.INFO)
 
 MONGODB_URI = os.environ.get("MONGODB_URI", "mongodb://localhost:27017")
-DB_NAME = "kb"
 ONET_CSV_PATH = os.environ.get("ONET_WORKSTYLES_CSV", "./app/data/WorkStyles.csv")
 FUZZY_THRESHOLD = float(os.environ.get("FUZZY_THRESHOLD", 80.0))
 
 mongo = AsyncIOMotorClient(MONGODB_URI)
-db = mongo[DB_NAME]
+db = mongo["kb"]
 domains_col = db["domains"]
 personality_col = db["personality"]
 jobs_col = mongo["job_listings"]["jobs"]

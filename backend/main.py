@@ -12,6 +12,7 @@ load_dotenv()
 from frontdoor.parse_resume import parse_resume,upload_resume_to_cloud,get_resume_url
 from frontdoor.mbti_questionnare import prepare_questions,evaluate_answers
 from frontdoor.user import insert_user_to_db
+from careertree.tree import generate_one
 
 from normalizer.normalizer import normalize_skills
 
@@ -113,5 +114,6 @@ async def login(payload: LoginRequest):
     token = create_access_token(data={"sub": str(user["_id"])})
     return {"access_token": token, "token_type": "bearer"}
 
-
-
+@app.post("/generate/{name}")
+async def genTree(name: str):
+    return await generate_one(name)

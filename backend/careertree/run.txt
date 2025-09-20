@@ -1,0 +1,2 @@
+cd careertree
+uvicorn main:app
