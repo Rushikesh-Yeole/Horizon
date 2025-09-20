@@ -51,19 +51,6 @@ def get_user(user_id: str):
         print(f"mongodb error while fetching user {e}")
         raise 
 
-# def mark_user_onboarded(user_id: str):
-    
-#     try:
-#         result = collection.update_one(
-#             {"_id": ObjectId(user_id)},
-#             {"$set": {"confirm_pending": False}}
-#         )
-#         if result.matched_count == 0:
-#             raise ValueError("user does not exist")
-#         print(f"user successfully updated {user_id}")
-#     except Exception as e:
-#         print(f"mongodb error while onboarding user {e}")
-#         raise 
 
 def update_user_personality(user: dict, personality: dict):
     
