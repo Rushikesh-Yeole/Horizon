@@ -20,6 +20,8 @@ import json
 import tempfile
 from datetime import timedelta
 
+import uuid
+
 from .user import normalize_skills
 
 load_dotenv()
@@ -99,10 +101,22 @@ def parse_resume(file_path: str):
         if local_path and os.path.exists(local_path):
             os.remove(local_path)
 
-async def upload_resume_to_cloud(file :UploadFile,user_id:str):
+
+def get_resume_url(bucket_name,dest_blob_name):
+        
+        storage_client = storage.Client()
+        bucket = storage_client.bucket(bucket_name=bucket_name)
+        blob = bucket.blob(dest_blob_name)
+
+        expiration_hours = 2
+        signed_url = blob.generate_signed_url(expiration=timedelta(hours=expiration_hours))
+        print(f"generated signed url {signed_url}")
+        return signed_url
+
+async def upload_resume_to_cloud(file :UploadFile):
     try:
         print("uploading resume to cloud storage...")
-        dest_blob_name = f"{user_id}_resume.pdf"
+        dest_blob_name = f"{uuid.uuid4}_resume.pdf"
 
         storage_client = storage.Client()
         bucket = storage_client.bucket(BUCKET_NAME)
@@ -111,10 +125,10 @@ async def upload_resume_to_cloud(file :UploadFile,user_id:str):
         # generation_match_precondition = 0
         blob.upload_from_file(file.file,content_type=file.content_type)
 
-        expiration_hours = 2
-        signed_url = blob.generate_signed_url(expiration=timedelta(hours=expiration_hours))
-        print(f"uploaded to cloud storage successfully {signed_url}")
-        return signed_url
+        print(f"resume uploaded successfully")
+
+        return BUCKET_NAME,dest_blob_name
+
     except Exception as e:
         print(f"cloud storage exception: {e}")
         raise 

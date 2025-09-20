@@ -9,7 +9,7 @@ from dotenv import load_dotenv
 import os
 load_dotenv()
 
-from frontdoor.parse_resume import parse_resume,upload_resume_to_cloud,merge_resume_with_user
+from frontdoor.parse_resume import parse_resume,upload_resume_to_cloud,merge_resume_with_user,get_resume_url
 from frontdoor.mbti_questionnare import prepare_questions,evaluate_answers
 from frontdoor.user import insert_user_to_db,update_user_personality
 
@@ -40,6 +40,10 @@ class UserForm(BaseModel):
     education: List[Education]
     skills: List[str]
     projects: List[Project]
+    personality: Dict[str,int] #calculated by backend, cant be modified
+    resume_link: str #not visible in form
+    bucket: str #not visible
+    destination_blob: str #not visible 
     password: str
 
 class LoginRequest(BaseModel):
@@ -50,62 +54,46 @@ class Answers(BaseModel):
     answers: List[Dict[str,Any]]
 
 
-pendingUsers : Dict[str,Dict[str,any]] = {}
-
-
-
 @app.post("/user/register")
 async def register_user(user: UserForm):
-    user_id = str(ObjectId())
-    pendingUsers[user_id] = user.model_dump(exclude_none=True)
-    pendingUsers[user_id]["password"] = hash_password(user.password)
-    pendingUsers[user_id]["personality_ready"] = False
+    user_data = user.model_dump(exclude_none=True)
+    user_data["password"] = hash_password(user.password)
+    
+    if(user_data["personality"]=={}):
+        return JSONResponse({"message":"user must complete MBTI questionnare first"},status_code=400)
+    
+    user_id = insert_user_to_db(user_data)
+
     return JSONResponse({"user_id":user_id},status_code=200)
 
-@app.post("/user/{user_id}/resume")
-async def upload_resume(user_id:str, file: UploadFile = File(...)):
-    if user_id not in pendingUsers:
-         raise HTTPException(status_code=404, detail="User not found in pending registrations")
-    
-    user = pendingUsers[user_id]
-    resume_url = await upload_resume_to_cloud(file,user_id)
+@app.post("/user/resume")
+async def upload_resume(file: UploadFile = File(...)):
+    """stores the resume in GCS, parses it and returns 
+    bucket name
+    destination blob
+    parsed resume dict
+    """
+    bucket_name,dest_blob_name = await upload_resume_to_cloud(file)
+    resume_url = get_resume_url(bucket_name,dest_blob_name)
     parsed_resume = parse_resume(resume_url)
 
-    merged_user = merge_resume_with_user(user,parsed_resume,resume_url)
-    pendingUsers[user_id] = merged_user
+    return JSONResponse({"bucket":bucket_name,"dest_blob":dest_blob_name,"parsed_resume":parsed_resume},status_code=200)
 
-    return JSONResponse({"user_id":user_id},status_code=200)
-
-@app.post("/user/{user_id}/confirm")
-async def user_confirm(user_id: str):
-    # user = get_user(user_id)
-    user = pendingUsers[user_id]
-
-    if not user.get("personality_ready"):
-        raise HTTPException(status_code=400, detail="Complete MBTI questionnaire first")
-    
-    insert_user_to_db(user)
-
-    del pendingUsers[user_id]
-
-    return JSONResponse({"message":"user onboarding complete"},status_code=200)
-
-@app.get("/user/{user_id}/questions")
-async def get_questions(user_id:str):
+@app.get("/user/questions")
+async def get_questions():
     try:
         questions = prepare_questions()
     except Exception as e:
         return JSONResponse({"err in getting mbti questions":str(e)},status_code=500)
     return JSONResponse({"questions":questions},status_code=200)
 
-@app.post("/user/{user_id}/answers")
-async def process_answers(user_id:str, answers: Answers):
-    user = pendingUsers[user_id]
-
-    scores,pers = evaluate_answers(answers.answers)
-    updated_user = update_user_personality(user,scores)
-    pendingUsers[user_id] = updated_user
-    return JSONResponse({"personality scores":scores},status_code=200)
+@app.post("/user/answers")
+async def process_answers(answers: Answers):
+    try:
+        scores,pers = evaluate_answers(answers.answers)
+        return JSONResponse({"personality scores":scores},status_code=200)
+    except Exception as e:
+        return JSONResponse({"err":f"{str(e)}"},status_code=400)
 
 @app.post("/auth/login")
 async def login(payload: LoginRequest):
