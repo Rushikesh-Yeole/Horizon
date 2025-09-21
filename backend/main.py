@@ -5,7 +5,8 @@ from typing import List,Any,Dict,Optional
 
 import asyncio
 import datetime
-
+import json
+import tempfile
 from pymongo import MongoClient
 from bson.objectid import ObjectId
 from dotenv import load_dotenv
@@ -14,10 +15,21 @@ from fastapi.middleware.cors import CORSMiddleware
 
 load_dotenv()
 # Set Google credentials for local dev or relative path deploys
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.getenv(
-    "GOOGLE_APPLICATION_CREDENTIALS",
-    os.path.join(os.path.dirname(__file__), "creds", "service-account.json")
-)
+google_creds_json = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+
+# Parse it to make sure it’s valid JSON
+try:
+    creds_dict = json.loads(google_creds_json)
+except json.JSONDecodeError:
+    raise Exception("GOOGLE_APPLICATION_CREDENTIALS env var is not valid JSON!")
+
+# Write the JSON to a temporary file
+with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
+    json.dump(creds_dict, f)
+    temp_path = f.name
+
+# Set the env var to point to this temporary file
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = temp_path
 
 from frontdoor.parse_resume import parse_resume,upload_resume_to_cloud,get_resume_url
 from frontdoor.mbti_questionnare import prepare_questions,evaluate_answers

@@ -68,14 +68,14 @@ const HomePage: React.FC = () => {
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-              <Link to="/register">
-                <Button size="lg" icon={<Play size={20} />}>
-                  Get Started Free
-                </Button>
-              </Link>
               <Link to="/jobs">
                 <Button variant="glass" size="lg">
-                  Explore Jobs
+                  Curated Jobs
+                </Button>
+              </Link>
+              <Link to="/career-tree">
+                <Button variant="glass" size="lg">
+                  Career Tree
                 </Button>
               </Link>
             </div>
