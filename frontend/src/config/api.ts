@@ -2,7 +2,7 @@
 export const API_CONFIG = {
   // Main backend server (for user management, auth, etc.)
   MAIN_BACKEND: {
-    BASE_URL: 'http://127.0.0.1:8000',
+    BASE_URL: 'https://horizon-kj3b.onrender.com',
     ENDPOINTS: {
       AUTH: {
         LOGIN: '/auth/login',
@@ -20,7 +20,7 @@ export const API_CONFIG = {
   
   // JobForge backend server (for job recommendations and search)
   JOBFORGE_BACKEND: {
-    BASE_URL: 'http://127.0.0.1:8001',
+    BASE_URL: 'https://horizon-jobforge.onrender.com',
     ENDPOINTS: {
       RECOMMEND: '/recommend',
       SEARCH: '/search'

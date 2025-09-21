@@ -12,8 +12,10 @@ const LoginPage: React.FC = () => {
   const [formData, setFormData] = useState({
     email: '',
     password: '',
+    name: '',
   });
   const [showPassword, setShowPassword] = useState(false);
+  const [name, setName] = useState(false);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const navigate = useNavigate();
@@ -29,17 +31,15 @@ const LoginPage: React.FC = () => {
   const validateForm = () => {
     const newErrors: { [key: string]: string } = {};
     
-    if (!formData.email) {
-      newErrors.email = 'Email is required';
-    } else if (!/\S+@\S+\.\S+/.test(formData.email)) {
-      newErrors.email = 'Email is invalid';
+    if (!formData.name) {
+      newErrors.name = 'Email is required';
     }
     
-    if (!formData.password) {
-      newErrors.password = 'Password is required';
-    } else if (formData.password.length < 6) {
-      newErrors.password = 'Password must be at least 6 characters';
-    }
+    // if (!formData.password) {
+    //   newErrors.password = 'Password is required';
+    // } else if (formData.password.length < 6) {
+    //   newErrors.password = 'Password must be at least 6 characters';
+    // }
     
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -53,14 +53,14 @@ const LoginPage: React.FC = () => {
     setLoading(true);
     
     try {
-      const response = await axios.post(getAuthUrl('LOGIN'), {
-        email: formData.email,
-        password: formData.password,
-      });
+      // const response = await axios.post(getAuthUrl('LOGIN'), {
+      //   email: formData.email,
+      //   password: formData.password,
+      // });
       
       // Store the access token
-      localStorage.setItem('access_token', response.data.access_token);
-      localStorage.setItem('user_id', response.data.user_id || 'x'); // Default to 'x' if not provided
+      localStorage.setItem('access_token', formData.name);
+      localStorage.setItem('user_id', formData.name); // Default to 'x' if not provided
       
       navigate('/jobs');
     } catch (error) {
@@ -121,6 +121,9 @@ const LoginPage: React.FC = () => {
               <p className="text-white/70">
                 Sign in to your Horizon account
               </p>
+              <p className="text-white/30">
+                Prototype: Login is inactive; explore freely.
+              </p>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -131,18 +134,18 @@ const LoginPage: React.FC = () => {
               )}
               
               <Input
-                label="Email Address"
-                type="email"
-                name="email"
-                value={formData.email}
+                label="Name"
+                type="text"
+                name="name"
+                value={formData.name}
                 onChange={handleChange}
-                error={errors.email}
+                error={errors.name}
                 icon={<Mail size={18} />}
-                placeholder="Enter your email"
-                variant="glass"
+                placeholder="Enter your name"
+                // variant="glass"
               />
 
-              <div className="relative">
+              {/* <div className="relative">
                 <Input
                   label="Password"
                   type={showPassword ? 'text' : 'password'}
@@ -152,7 +155,7 @@ const LoginPage: React.FC = () => {
                   error={errors.password}
                   icon={<Lock size={18} />}
                   placeholder="Enter your password"
-                  variant="glass"
+                  // variant="glass"
                 />
                 <button
                   type="button"
@@ -161,7 +164,7 @@ const LoginPage: React.FC = () => {
                 >
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
-              </div>
+              </div> */}
 
               <div className="flex items-center justify-between">
                 <label className="flex items-center space-x-2 text-white/70 text-sm">

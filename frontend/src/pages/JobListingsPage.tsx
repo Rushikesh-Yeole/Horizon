@@ -47,6 +47,10 @@ const JobListingsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchTriggered, setSearchTriggered] = useState(false);
 
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   // Load jobs from API
   useEffect(() => {
     const loadJobs = async () => {
