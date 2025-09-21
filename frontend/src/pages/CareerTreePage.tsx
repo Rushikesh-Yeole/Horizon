@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import axios from 'axios';
+import { buildMainBackendUrl } from '../config/api';
 import { 
   Target, 
   RotateCcw,
@@ -62,7 +63,7 @@ const CareerTreePage: React.FC = () => {
   const generateCareerTree = async () => {
     setIsGenerating(true);
     try {
-      const response = await axios.post('http://127.0.0.1:8000/careertree/generate/x');
+      const response = await axios.post(buildMainBackendUrl(`/careertree/generate/${localStorage.getItem('user_id')}`));
       
       // The API returns { user_id, status, tree } structure
       if (response.data.status === 'ok' && response.data.tree) {
@@ -99,16 +100,16 @@ const CareerTreePage: React.FC = () => {
   };
 
   const getConfidenceColor = (confidence: number) => {
-    if (confidence >= 0.9) return 'text-green-400';
-    if (confidence >= 0.8) return 'text-yellow-400';
-    if (confidence >= 0.7) return 'text-orange-400';
+    if (confidence >= 0.8) return 'text-green-400';
+    if (confidence >= 0.7) return 'text-yellow-400';
+    if (confidence >= 0.6) return 'text-orange-400';
     return 'text-red-400';
   };
 
   const getConfidenceBg = (confidence: number) => {
-    if (confidence >= 0.9) return 'bg-green-500/20';
-    if (confidence >= 0.8) return 'bg-yellow-500/20';
-    if (confidence >= 0.7) return 'bg-orange-500/20';
+    if (confidence >= 0.8) return 'bg-green-500/20';
+    if (confidence >= 0.7) return 'bg-yellow-500/20';
+    if (confidence >= 0.6) return 'bg-orange-500/20';
     return 'bg-red-500/20';
   };
 
@@ -121,10 +122,10 @@ const CareerTreePage: React.FC = () => {
         <div className="flex items-center justify-between mb-8">
           <div>
             <h1 className="text-4xl font-bold text-white mb-2">
-              Career <span className="gradient-text">Tree</span>
+              Career Tree
             </h1>
             <p className="text-xl text-white/70">
-              Visualize your professional growth journey
+              Visualize your professional growth journey at <span className="gradient-text"> every step</span>
             </p>
           </div>
           
@@ -153,14 +154,18 @@ const CareerTreePage: React.FC = () => {
           /* Generate Tree State */
           <div className="flex items-center justify-center min-h-[60vh]">
             <Card variant="liquid" className="p-12 text-center max-w-md">
-              <div className="w-20 h-20 bg-gradient-to-br from-horizon-800 to-horizon-900 border border-white/20 rounded-3xl flex items-center justify-center mx-auto mb-6">
-                <Sparkles size={40} className="text-white" />
+              <div className="w-20 h-20 rounded-3xl flex items-center justify-center mx-auto mb-6">
+                <img 
+                  src="/horizonLogo.png" 
+                  alt="Horizon Logo" 
+                  className="h-20 w-auto"
+                />
               </div>
               <h2 className="text-2xl font-bold text-white mb-4">
-                Generate Your Career Tree
+                Generate <span className="gradient-text"> Your Career Tree</span>
               </h2>
               <p className="text-white/70 mb-8">
-                Click the button above to generate a personalized career tree based on your profile and industry insights.
+                * Personalized career tree <br/> * Various stages and opportunities <br/>* Anchored to profile and industry insights
               </p>
               <Button
                 onClick={generateCareerTree}
@@ -179,10 +184,10 @@ const CareerTreePage: React.FC = () => {
             <div className="lg:col-span-2">
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-2xl font-bold text-white">
-                    Your Career Paths
+                  <h2 className="text-lg font-bold text-slate-100">
+                  Career Paths curated for you aggregating top advisory sources
                   </h2>
-                  <div className="flex items-center space-x-2">
+                  {/* <div className="flex items-center space-x-2">
                     <Button
                       variant="ghost"
                       size="sm"
@@ -190,7 +195,7 @@ const CareerTreePage: React.FC = () => {
                     >
                       Reset View
                     </Button>
-                  </div>
+                  </div> */}
                 </div>
 
                 {/* Tree Visualization */}
@@ -265,7 +270,7 @@ const CareerTreePage: React.FC = () => {
                                 transition={{ duration: 0.4, delay: stageIndex * 0.1 }}
                                 whileHover={{ scale: 1.05 }}
                                 whileTap={{ scale: 0.95 }}
-                                onClick={() => setSelectedStage(stage)}
+                                onClick={() => {window.scrollTo(0, 0);setSelectedStage(stage);}}
                                 className={`relative cursor-pointer transition-all duration-300 ${
                                   selectedStage?.id === stage.id ? 'scale-110 z-20' : ''
                                 }`}

@@ -1,0 +1,32 @@
+[33m7e53fff0[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m HEAD@{0}: reset: moving to HEAD~1
+[33m1a21f7f7[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{1}: checkout: moving from main to main
+[33m1a21f7f7[m[33m ([m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m HEAD@{2}: commit: jobForge threshold
+[33m7e53fff0[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m HEAD@{3}: reset: moving to HEAD~1
+[33m84023258[m HEAD@{4}: reset: moving to HEAD~1
+[33mc641ba0e[m HEAD@{5}: reset: moving to HEAD~4
+[33m9d7015ca[m HEAD@{6}: checkout: moving from main to main
+[33m9d7015ca[m HEAD@{7}: commit: Remove node cache from repository index
+[33m4817209e[m HEAD@{8}: commit: git issue
+[33m83aa4c1c[m HEAD@{9}: commit: git issue
+[33m906e4d10[m HEAD@{10}: commit: jobForge env fix + minor UI
+[33mc641ba0e[m HEAD@{11}: pull --tags origin main: Merge made by the 'ort' strategy.
+[33m84023258[m HEAD@{12}: commit: jobForge threshold
+[33m7e53fff0[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m)[m HEAD@{13}: commit: auth skip
+[33mbd902517[m HEAD@{14}: commit: minor
+[33m7ebc831f[m HEAD@{15}: commit: minor
+[33m5ecbae44[m HEAD@{16}: commit: integration complete
+[33m9da115bc[m HEAD@{17}: commit: minor+
+[33md63c7dc9[m HEAD@{18}: commit: minor+
+[33m6d4b3982[m HEAD@{19}: commit: frontend integration+
+[33mb0605532[m HEAD@{20}: commit: frontend + minor backend env fix
+[33m884b2fa5[m HEAD@{21}: pull --tags origin main: Fast-forward
+[33mc0551ea1[m HEAD@{22}: commit: career tree
+[33md1d8e566[m HEAD@{23}: pull --tags origin main: Fast-forward
+[33mb89aeb48[m HEAD@{24}: commit: jobs aggregator + temp manipulation functions in personality.py
+[33mda4aee5e[m HEAD@{25}: commit: initialize
+[33m2e671730[m HEAD@{26}: reset: moving to HEAD~1
+[33m1a8f7493[m HEAD@{27}: commit: initialize
+[33m2e671730[m HEAD@{28}: reset: moving to HEAD~1
+[33m46fee305[m HEAD@{29}: commit: initialize
+[33m2e671730[m HEAD@{30}: Branch: renamed refs/heads/main to refs/heads/main
+[33m2e671730[m HEAD@{32}: commit (initial): first commit

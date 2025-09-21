@@ -47,9 +47,12 @@ const JobListingsPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [searchTriggered, setSearchTriggered] = useState(false);
 
-  useEffect(() => {
-    window.scrollTo(0, 0);
-  }, []);
+useEffect(() => {
+if (!loading) {
+  window.scrollTo({ top: 0, behavior: 'auto' });
+  }
+}, [loading]);
+
 
   // Load jobs from API
   useEffect(() => {
@@ -274,16 +277,16 @@ const JobListingsPage: React.FC = () => {
   };
 
   const getMatchColor = (score: number) => {
-    if (score >= 90) return 'text-green-400';
-    if (score >= 80) return 'text-yellow-400';
-    if (score >= 70) return 'text-orange-400';
+    if (score >= 80) return 'text-green-400';
+    if (score >= 70) return 'text-yellow-400';
+    if (score >= 60) return 'text-orange-400';
     return 'text-red-400';
   };
 
   const getMatchBg = (score: number) => {
-    if (score >= 90) return 'bg-green-500/20';
-    if (score >= 80) return 'bg-yellow-500/20';
-    if (score >= 70) return 'bg-orange-500/20';
+    if (score >= 80) return 'bg-green-500/20';
+    if (score >= 70) return 'bg-yellow-500/20';
+    if (score >= 60) return 'bg-orange-500/20';
     return 'bg-red-500/20';
   };
 

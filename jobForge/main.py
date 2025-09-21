@@ -15,11 +15,13 @@ from datetime import datetime, timezone
 from motor.motor_asyncio import AsyncIOMotorClient
 from bson import ObjectId
 from fastapi.middleware.cors import CORSMiddleware
+from dotenv import load_dotenv
+load_dotenv()  # <- this loads variables from .env
 
 # ---------- CONFIG ----------
 FUZZY_TITLE_THRESHOLD = float(os.environ.get("FUZZY_TITLE_THRESHOLD", 70.0))
 ACTIVE_FUZZY_TITLE_THRESHOLD = float(os.environ.get("ACTIVE_FUZZY_TITLE_THRESHOLD", 60.0))
-SKILL_FUZZY_THRESHOLD = float(os.environ.get("SKILL_FUZZY_THRESHOLD", 78.0))
+SKILL_FUZZY_THRESHOLD = float(os.environ.get("SKILL_FUZZY_THRESHOLD", 60.0))
 MAX_TITLE_MATCHES = int(os.environ.get("MAX_TITLE_MATCHES", 50))
 W_SKILLS = float(os.environ.get("W_SKILLS", 0.60))
 W_PERSONALITY = float(os.environ.get("W_PERSONALITY", 0.25))

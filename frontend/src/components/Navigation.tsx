@@ -1,14 +1,15 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Menu, X, Briefcase, TreePine, Home } from 'lucide-react';
+import { Menu, X, BriefcaseBusiness as Briefcase, Waypoints as TreePine, Home } from 'lucide-react';
 
 const Navigation: React.FC = () => {
   const [isOpen, setIsOpen] = useState(false);
+
   const location = useLocation();
 
   const navItems = [
-    { name: 'Home', path: '/', icon: Home },
+    // { name: 'Home', path: '/', icon: Home },
     { name: 'Jobs', path: '/jobs', icon: Briefcase },
     { name: 'Career Tree', path: '/career-tree', icon: TreePine },
   ];
@@ -18,7 +19,7 @@ const Navigation: React.FC = () => {
       initial={{ y: -100, opacity: 0 }}
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.6, ease: "easeOut" }}
-      className="fixed top-0 left-16 right-16 z-50 glass-card border-b border-white/10 mt-6"
+      className="fixed top-0 left-16 right-16 z-50 glass-card border-b border-white/10 mt-6 rounded-3xl"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
@@ -33,7 +34,7 @@ const Navigation: React.FC = () => {
           </Link>
 
           {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-8">
+          <div className="hidden md:flex items-center space-x-8 ml-36">
             {navItems.map((item) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.path;
@@ -59,13 +60,13 @@ const Navigation: React.FC = () => {
           <div className="hidden md:flex items-center space-x-4">
             <Link
               to="/login"
-              className="text-white/70 hover:text-white transition-colors duration-300"
+              className="text-white/70 hover:text-white transition-colors duration-300 text-xl font-bold"
             >
-              Sign In
+            {(localStorage.getItem('user_id') || "Sign In").replace(/^./, c => c.toUpperCase())}
             </Link>
             <Link
               to="/register"
-              className="btn-primary"
+              className="btn-primary rounded-xl"
             >
               Get Started
             </Link>
@@ -118,7 +119,7 @@ const Navigation: React.FC = () => {
                     onClick={() => setIsOpen(false)}
                     className="block px-4 py-3 text-white/70 hover:text-white transition-colors duration-300"
                   >
-                    Sign In
+                  Sign In
                   </Link>
                   <Link
                     to="/register"
