@@ -88,3 +88,4 @@ src/
 ## License
 
 This project is part of the Horizon career intelligence platform.
+

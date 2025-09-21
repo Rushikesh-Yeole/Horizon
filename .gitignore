@@ -1,10 +1,5 @@
 
 /seeder/.env
-/jobForge/.env
-
-#env
-/seeder/.env
-/backend/.env
 
 #pycache
 __pycache__
@@ -16,4 +11,3 @@ __pycache__
 data
 external
 testing
-

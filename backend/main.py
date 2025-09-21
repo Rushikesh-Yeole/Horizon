@@ -10,7 +10,14 @@ from pymongo import MongoClient
 from bson.objectid import ObjectId
 from dotenv import load_dotenv
 import os
+from fastapi.middleware.cors import CORSMiddleware
+
 load_dotenv()
+# Set Google credentials for local dev or relative path deploys
+os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = os.getenv(
+    "GOOGLE_APPLICATION_CREDENTIALS",
+    os.path.join(os.path.dirname(__file__), "creds", "service-account.json")
+)
 
 from frontdoor.parse_resume import parse_resume,upload_resume_to_cloud,get_resume_url
 from frontdoor.mbti_questionnare import prepare_questions,evaluate_answers
@@ -22,6 +29,13 @@ from normalizer.normalizer import normalize_skills
 from auth import hash_password, verify_password, create_access_token
 
 app = FastAPI()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],       # list of allowed origins
+    allow_credentials=True,      # allow cookies, auth headers
+    allow_methods=["*"],         # allow all HTTP methods (GET, POST, etc.)
+    allow_headers=["*"],         # allow all headers
+)
 
 client = MongoClient(os.getenv("MONGODB_URI"))
 user_db = client["user_db"]

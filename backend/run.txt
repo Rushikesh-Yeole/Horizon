@@ -1,0 +1,2 @@
+uvicorn main:app --reload --port 8000
+set GOOGLE_APPLICATION_CREDENTIALS=C:\Users\rushi\Music\Cave\Lab\Projects\Horizon\backend\creds\service-account.json
