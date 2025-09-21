@@ -24,7 +24,7 @@ import uuid
 
 from normalizer.normalizer import normalize_skills
 
-load_dotenv()
+load_dotenv(dotenv_path='../../.env')
 PROJECT_ID = os.getenv("GOOGLE_PROJECT_ID")
 LOCATION = os.getenv("GOOGLE_VERTEX_LOC")
 PROCESSOR_ID = os.getenv("GOOGLE_DOC_PROCESSOR_ID")

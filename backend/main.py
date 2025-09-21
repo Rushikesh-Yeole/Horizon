@@ -15,7 +15,7 @@ load_dotenv()
 from frontdoor.parse_resume import parse_resume,upload_resume_to_cloud,get_resume_url
 from frontdoor.mbti_questionnare import prepare_questions,evaluate_answers
 from frontdoor.user import insert_user_to_db
-from careertree.tree import users_collection,generate_for_user,ctrees_collection,ctree_failures,logger
+from careertree.tree import users_collection,generate_for_user, generate_one, ctrees_collection,ctree_failures,logger
 
 from normalizer.normalizer import normalize_skills
 
@@ -124,36 +124,16 @@ async def login(payload: LoginRequest):
 async def genTree(name: str):
     return await generate_one(name)
 
-@app.post("/careertree/batch-generate")
-async def batch_generate():
-    # fetch users from MongoDB; change filter as needed
-    users = await users_collection.find().to_list(length=1000)
-    if not users:
-        return {"count": 0, "results": []}
-    # call generate_for_user by id for each user
-    tasks = [generate_for_user(u.get("id") or u.get("user_id")) for u in users]
-    results = await asyncio.gather(*tasks)
-    return JSONResponse({"count": len(results), "results": results},status_code=200)
-
-@app.post("/careertree/generate/{user_id}")
-async def generate_one(user_id: str):
-    result = await generate_for_user(user_id)
-    if result.get("status") == "error":
-        raise HTTPException(status_code=500, detail=result.get("error", "generation failed"))
-    return JSONResponse({"result":result},status_code=200)
-
 @app.get("/careertree/health")
 def health():
     return {"status": "ok", "time": datetime.datetime.utcnow().isoformat() + "Z"}
 
-@app.on_event("startup")
-async def startup_tasks():
-    try:
-        await users_collection.create_index("id", unique=True)
-        # index ctrees.id for quick lookup; not unique because you may want multiple versions
-        await ctrees_collection.create_index("id", unique=False)
-        # index failure logs
-        await ctree_failures.create_index("id", unique=False)
-        logger.info("Ensured index on users.id, ctrees.id and ctree_failures.id")
-    except Exception as e:
-        logger.warning("Index creation failed or already exists: %s", e)
+# @app.on_event("startup")
+# async def startup_tasks():
+#     try:
+#         await users_collection.create_index("id", unique=True)
+#         await ctrees_collection.create_index("id", unique=False)
+#         await ctree_failures.create_index("id", unique=False)
+#         logger.info("Ensured index on users.id, ctrees.id and ctree_failures.id")
+#     except Exception as e:
+#         logger.warning("Index creation failed or already exists: %s", e)

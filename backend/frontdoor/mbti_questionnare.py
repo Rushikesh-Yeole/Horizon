@@ -12,7 +12,7 @@ import json
 from dotenv import load_dotenv
 import os
 
-load_dotenv()
+load_dotenv(dotenv_path='../../.env')
 # db = firestore.Client(database="hackathonfirestore")
 # batch = db.batch()
 # collection_ref = db.collection("questions")

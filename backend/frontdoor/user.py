@@ -6,7 +6,7 @@ from bson.objectid import ObjectId
 from dotenv import load_dotenv
 import os
 
-load_dotenv()
+load_dotenv(dotenv_path='../../.env')
 
 client = MongoClient(os.getenv("MONGODB_URI"))
 db = client["users_db"]  

@@ -19,7 +19,7 @@ from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
 
 # load env
-load_dotenv()
+load_dotenv(dotenv_path='../../.env')
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("career-generator")
 
@@ -299,7 +299,7 @@ def extract_career_tree_dict(parsed):
 def build_prompt(payload: dict) -> str:
     requirements = [
         "OUTPUT: JSON only. Return exactly one JSON object conforming to the CareerTree schema below. No extra text.",
-        "Return exactly 5 distinct career paths. Each path: 4-7 stages. Each stage: 4-10 opportunities.",
+        "Return exactly 3 distinct career paths. Each path: 4-7 stages. Each stage: 4-10 opportunities.",
         "Design career PATHS & STAGES STRICTLY based on authoritative ADVICE NOT ONLY GENERIC paths and stages: use career articles, blog posts by senior professionals, LinkedIn long-reads, high-signal forum discussions (e.g., relevant subreddits, Hacker News), and published career guides to inform structure (place these advisory URLs in 'tree.provenance' and/or 'stage.provenance').",
         "Provide EXTREMELY CURATED (according to suited jobs, education level, etc...) stages in chronological order aplicable ahead of user's education stage (internships, masters, jobs, mba, career pivot, etc...)",
         "For each stage, provide TOP OPPORTUNITIES (internships, jobs, programs, etc.). Source these from company career pages, university program pages, or reputable job boards. Put these URLs in top_opportunities.provenance.",
@@ -662,6 +662,37 @@ async def generate_for_user(user_id: str, max_retries: int = 4) -> dict:
 
 # -----------------------------
 # Endpoints
+# -----------------------------
+@app.post("/batch-generate")
+async def batch_generate():
+    # fetch users from MongoDB; change filter as needed
+    users = await users_collection.find().to_list(length=1000)
+    if not users:
+        return {"count": 0, "results": []}
+    # call generate_for_user by id for each user
+    tasks = [generate_for_user(u.get("id") or u.get("user_id")) for u in users]
+    results = await asyncio.gather(*tasks)
+    return {"count": len(results), "results": results}
+
+@app.post("/generate/{user_id}")
+async def generate_one(user_id: str):
+    # --- Minimal change start ---
+    existing_tree = await ctrees_collection.find_one({"id": user_id})
+    if existing_tree:
+        existing_tree.pop("_id", None)  # Remove MongoDB ObjectId for JSON serialization
+        return {"user_id": user_id, "status": "ok", "tree": existing_tree}
+    # --- Minimal change end ---
+    
+    result = await generate_for_user(user_id)
+    if result.get("status") == "error":
+        raise HTTPException(status_code=500, detail=result.get("error", "generation failed"))
+    return result
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok", "time": datetime.datetime.utcnow().isoformat() + "Z"}
+
 # -----------------------------
 
 # -----------------------------
