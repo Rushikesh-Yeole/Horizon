@@ -115,7 +115,7 @@ const CareerTreePage: React.FC = () => {
   const filteredPaths = careerTree?.paths || [];
 
   return (
-    <div className={`min-h-screen pt-16 pb-20 ${isFullscreen ? 'fixed inset-0 z-50 bg-horizon-950' : ''}`}>
+    <div className={`min-h-screen pt-32 pb-20 ${isFullscreen ? 'fixed inset-0 z-50 bg-horizon-950' : ''}`}>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Header */}
         <div className="flex items-center justify-between mb-8">
@@ -128,7 +128,7 @@ const CareerTreePage: React.FC = () => {
             </p>
           </div>
           
-          <div className="flex items-center space-x-4">
+          {/* <div className="flex items-center space-x-4">
             {!careerTree && (
               <Button
                 onClick={generateCareerTree}
@@ -146,7 +146,7 @@ const CareerTreePage: React.FC = () => {
             >
               {isFullscreen ? 'Exit' : 'Fullscreen'}
             </Button>
-          </div>
+          </div> */}
         </div>
 
         {!careerTree ? (

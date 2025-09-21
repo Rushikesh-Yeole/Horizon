@@ -27,13 +27,22 @@ interface MBTIQuestion {
   }[];
 }
 
+interface LikertScaleQuestion {
+  id: string;
+  question: string;
+  scale: {
+    text: string;
+    value: number;
+  }[];
+}
+
 const ProfileSetupPage: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [currentStep, setCurrentStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<{ [key: string]: string }>({});
-  const [mbtiQuestions, setMbtiQuestions] = useState<MBTIQuestion[]>([]);
+  const [mbtiQuestions, setMbtiQuestions] = useState<LikertScaleQuestion[]>([]);
   const [personalityScores, setPersonalityScores] = useState<{ [key: string]: number }>({});
   const [formData, setFormData] = useState({
     resume: null as File | null,
@@ -41,7 +50,7 @@ const ProfileSetupPage: React.FC = () => {
     experience: '',
     skills: [] as string[],
     interests: [] as string[],
-    mbtiAnswers: {} as { [key: string]: string },
+    mbtiAnswers: {} as { [key: string]: number },
     // Registration data from previous step
     name: '',
     email: '',
@@ -61,57 +70,79 @@ const ProfileSetupPage: React.FC = () => {
     const loadQuestions = async () => {
       try {
         const response = await axios.get(getUserUrl('QUESTIONS'));
-        setMbtiQuestions(response.data.questions);
+        if (response.data && response.data.questions) {
+          setMbtiQuestions(response.data.questions);
+        } else {
+          throw new Error('Invalid response format');
+        }
       } catch (error) {
         console.error('Error loading MBTI questions:', error);
         // Fallback to hardcoded questions if API fails
         setMbtiQuestions([
           {
             id: 'q1',
-            question: 'At a party, you would rather:',
-            options: [
-              { text: 'Meet new people and socialize', value: 'E' },
-              { text: 'Have deep conversations with a few close friends', value: 'I' },
+            question: 'I enjoy meeting new people and socializing at parties',
+            scale: [
+              { text: 'Strongly Disagree', value: 1 },
+              { text: 'Disagree', value: 2 },
+              { text: 'Neutral', value: 3 },
+              { text: 'Agree', value: 4 },
+              { text: 'Strongly Agree', value: 5 },
             ],
           },
           {
             id: 'q2',
-            question: 'When learning something new, you prefer:',
-            options: [
-              { text: 'Hands-on experience and practical examples', value: 'S' },
-              { text: 'Understanding the big picture and concepts', value: 'N' },
+            question: 'I prefer hands-on experience when learning something new',
+            scale: [
+              { text: 'Strongly Disagree', value: 1 },
+              { text: 'Disagree', value: 2 },
+              { text: 'Neutral', value: 3 },
+              { text: 'Agree', value: 4 },
+              { text: 'Strongly Agree', value: 5 },
             ],
           },
           {
             id: 'q3',
-            question: 'When making decisions, you rely more on:',
-            options: [
-              { text: 'Logic and objective analysis', value: 'T' },
-              { text: 'Values and how it affects people', value: 'F' },
+            question: 'I rely more on logic and objective analysis when making decisions',
+            scale: [
+              { text: 'Strongly Disagree', value: 1 },
+              { text: 'Disagree', value: 2 },
+              { text: 'Neutral', value: 3 },
+              { text: 'Agree', value: 4 },
+              { text: 'Strongly Agree', value: 5 },
             ],
           },
           {
             id: 'q4',
-            question: 'You prefer to:',
-            options: [
-              { text: 'Plan ahead and stick to schedules', value: 'J' },
-              { text: 'Keep your options open and be flexible', value: 'P' },
+            question: 'I prefer to plan ahead and stick to schedules',
+            scale: [
+              { text: 'Strongly Disagree', value: 1 },
+              { text: 'Disagree', value: 2 },
+              { text: 'Neutral', value: 3 },
+              { text: 'Agree', value: 4 },
+              { text: 'Strongly Agree', value: 5 },
             ],
           },
           {
             id: 'q5',
-            question: 'In group projects, you typically:',
-            options: [
-              { text: 'Take charge and organize the team', value: 'E' },
-              { text: 'Contribute ideas and support others', value: 'I' },
+            question: 'I typically take charge and organize the team in group projects',
+            scale: [
+              { text: 'Strongly Disagree', value: 1 },
+              { text: 'Disagree', value: 2 },
+              { text: 'Neutral', value: 3 },
+              { text: 'Agree', value: 4 },
+              { text: 'Strongly Agree', value: 5 },
             ],
           },
           {
             id: 'q6',
-            question: 'You are more interested in:',
-            options: [
-              { text: 'What is real and practical', value: 'S' },
-              { text: 'What is possible and theoretical', value: 'N' },
+            question: 'I am more interested in what is real and practical',
+            scale: [
+              { text: 'Strongly Disagree', value: 1 },
+              { text: 'Disagree', value: 2 },
+              { text: 'Neutral', value: 3 },
+              { text: 'Agree', value: 4 },
+              { text: 'Strongly Agree', value: 5 },
             ],
           },
         ]);
@@ -183,7 +214,7 @@ const ProfileSetupPage: React.FC = () => {
     }));
   };
 
-  const handleMBTIAnswer = (questionId: string, answer: string) => {
+  const handleMBTIAnswer = (questionId: string, answer: number) => {
     setFormData(prev => ({
       ...prev,
       mbtiAnswers: { ...prev.mbtiAnswers, [questionId]: answer }
@@ -281,11 +312,11 @@ const ProfileSetupPage: React.FC = () => {
       case 1:
         return formData.resume || (formData.education && formData.experience);
       case 2:
-        return formData.skills.length > 0;
+        return formData.skills && formData.skills.length > 0;
       case 3:
-        return formData.interests.length > 0;
+        return formData.interests && formData.interests.length > 0;
       case 4:
-        return Object.keys(formData.mbtiAnswers).length === mbtiQuestions.length;
+        return mbtiQuestions && mbtiQuestions.length > 0 && Object.keys(formData.mbtiAnswers).length === mbtiQuestions.length;
       default:
         return false;
     }
@@ -353,7 +384,7 @@ const ProfileSetupPage: React.FC = () => {
                 value={formData.education}
                 onChange={(e) => setFormData(prev => ({ ...prev, education: e.target.value }))}
                 placeholder="e.g., B.Tech Computer Science, IIT Delhi"
-                variant="glass"
+                // variant="glass"
               />
 
               <Input
@@ -361,7 +392,7 @@ const ProfileSetupPage: React.FC = () => {
                 value={formData.experience}
                 onChange={(e) => setFormData(prev => ({ ...prev, experience: e.target.value }))}
                 placeholder="e.g., 2 years as Software Engineer at Google"
-                variant="glass"
+                // variant="glass"
               />
             </div>
           </motion.div>
@@ -389,28 +420,28 @@ const ProfileSetupPage: React.FC = () => {
             </div>
 
             <div className="space-y-6">
-              {skillCategories.map((category) => (
+              {skillCategories && skillCategories.length > 0 ? skillCategories.map((category) => (
                 <div key={category.name}>
                   <h3 className="text-lg font-semibold text-white mb-3">
                     {category.name}
                   </h3>
                   <div className="flex flex-wrap gap-2">
-                    {category.skills.map((skill) => (
+                    {category.skills && category.skills.length > 0 ? category.skills.map((skill) => (
                       <button
                         key={skill}
                         onClick={() => handleSkillToggle(skill)}
                         className={`px-4 py-2 rounded-lg text-sm font-medium transition-all duration-300 ${
-                          formData.skills.includes(skill)
+                          formData.skills && formData.skills.includes(skill)
                             ? 'bg-gradient-to-r from-horizon-800 to-horizon-900 text-white'
                             : 'bg-white/10 text-white/70 hover:bg-white/20 hover:text-white'
                         }`}
                       >
                         {skill}
                       </button>
-                    ))}
+                    )) : null}
                   </div>
                 </div>
-              ))}
+              )) : null}
             </div>
           </motion.div>
         );
@@ -437,19 +468,19 @@ const ProfileSetupPage: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {interestDomains.map((interest) => (
+              {interestDomains && interestDomains.length > 0 ? interestDomains.map((interest) => (
                 <button
                   key={interest}
                   onClick={() => handleInterestToggle(interest)}
                   className={`p-4 rounded-xl text-sm font-medium transition-all duration-300 ${
-                    formData.interests.includes(interest)
+                    formData.interests && formData.interests.includes(interest)
                       ? 'bg-gradient-to-r from-purple-500 to-pink-600 text-white'
                       : 'bg-white/10 text-white/70 hover:bg-white/20 hover:text-white'
                   }`}
                 >
                   {interest}
                 </button>
-              ))}
+              )) : null}
             </div>
           </motion.div>
         );
@@ -475,30 +506,87 @@ const ProfileSetupPage: React.FC = () => {
               </p>
             </div>
 
-            <div className="space-y-8">
-              {mbtiQuestions.map((question, index) => (
-                <div key={question.id} className="space-y-4">
-                  <h3 className="text-lg font-semibold text-white">
-                    {index + 1}. {question.question}
-                  </h3>
-                  <div className="space-y-3">
-                    {question.options.map((option) => (
-                      <button
-                        key={option.value}
-                        onClick={() => handleMBTIAnswer(question.id, option.value)}
-                        className={`w-full p-4 rounded-xl text-left transition-all duration-300 ${
-                          formData.mbtiAnswers[question.id] === option.value
-                            ? 'bg-gradient-to-r from-pink-500 to-orange-600 text-white'
-                            : 'bg-white/10 text-white/70 hover:bg-white/20 hover:text-white'
-                        }`}
-                      >
-                        {option.text}
-                      </button>
-                    ))}
+            {mbtiQuestions && mbtiQuestions.length > 0 ? (
+              <div className="space-y-8">
+                {mbtiQuestions.map((question, index) => (
+                  <div key={question.id} className="bg-white/5 backdrop-blur-sm rounded-2xl p-6 border border-white/10">
+                    <div className="flex items-start space-x-4">
+                      <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-r from-pink-500 to-orange-600 rounded-full flex items-center justify-center text-white font-bold text-sm">
+                        {index + 1}
+                      </div>
+                      <div className="flex-1 space-y-4">
+                        <h3 className="text-lg font-semibold text-white leading-relaxed">
+                          {question.question}
+                        </h3>
+                        <div className="space-y-3">
+                          {question.scale && question.scale.length > 0 ? (
+                            <div className="grid grid-cols-5 gap-2">
+                              {question.scale.map((option, optionIndex) => (
+                                <label
+                                  key={option.value}
+                                  className={`block cursor-pointer group transition-all duration-300 ${
+                                    formData.mbtiAnswers[question.id] === option.value
+                                      ? 'opacity-100'
+                                      : 'opacity-80 hover:opacity-100'
+                                  }`}
+                                >
+                                  <input
+                                    type="radio"
+                                    name={`question-${question.id}`}
+                                    value={option.value}
+                                    checked={formData.mbtiAnswers[question.id] === option.value}
+                                    onChange={() => handleMBTIAnswer(question.id, option.value)}
+                                    className="sr-only"
+                                  />
+                                  <div className={`p-3 rounded-xl border-2 transition-all duration-300 text-center ${
+                                    formData.mbtiAnswers[question.id] === option.value
+                                      ? 'border-pink-500 bg-gradient-to-r from-pink-500/20 to-orange-600/20 text-white'
+                                      : 'border-white/20 bg-white/5 text-white/70 hover:border-white/40 hover:bg-white/10 hover:text-white'
+                                  }`}>
+                                    <div className="flex flex-col items-center space-y-2">
+                                      <div className={`w-4 h-4 rounded-full border-2 flex items-center justify-center transition-all duration-300 ${
+                                        formData.mbtiAnswers[question.id] === option.value
+                                          ? 'border-pink-500 bg-pink-500'
+                                          : 'border-white/40 group-hover:border-white/60'
+                                      }`}>
+                                        {formData.mbtiAnswers[question.id] === option.value && (
+                                          <div className="w-2 h-2 bg-white rounded-full"></div>
+                                        )}
+                                      </div>
+                                      <span className="font-medium text-xs leading-tight">{option.text}</span>
+                                    </div>
+                                  </div>
+                                </label>
+                              ))}
+                            </div>
+                          ) : null}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+                
+                {/* Progress indicator */}
+                <div className="bg-white/5 backdrop-blur-sm rounded-xl p-4 border border-white/10">
+                  <div className="flex items-center justify-between text-sm text-white/70 mb-2">
+                    <span>Assessment Progress</span>
+                    <span>{Object.keys(formData.mbtiAnswers).length} / {mbtiQuestions.length} completed</span>
+                  </div>
+                  <div className="w-full bg-white/10 rounded-full h-2">
+                    <div 
+                      className="bg-gradient-to-r from-pink-500 to-orange-600 h-2 rounded-full transition-all duration-500"
+                      style={{ width: `${(Object.keys(formData.mbtiAnswers).length / mbtiQuestions.length) * 100}%` }}
+                    ></div>
                   </div>
                 </div>
-              ))}
-            </div>
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-pink-500 mx-auto mb-6"></div>
+                <p className="text-white/70 text-lg">Loading personality questions...</p>
+                <p className="text-white/50 text-sm mt-2">This helps us find better job matches for you</p>
+              </div>
+            )}
           </motion.div>
         );
 
@@ -585,3 +673,4 @@ const ProfileSetupPage: React.FC = () => {
 };
 
 export default ProfileSetupPage;
+

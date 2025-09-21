@@ -20,8 +20,8 @@ const Input = forwardRef<HTMLInputElement, InputProps>(({
   const baseClasses = 'w-full px-4 py-3 rounded-xl text-white placeholder-white/50 focus:outline-none transition-all duration-300';
   
   const variants = {
-    default: 'bg-white/5 border border-white/20 focus:border-blue-400 focus:bg-white/10 text-white',
-    glass: 'liquid-glass focus:border-blue-400 focus:from-white/15 focus:to-white/10 text-white',
+    default: 'bg-white/5 border border-white/20 focus:border-blue-400 focus:bg-white/10',
+    glass: 'liquid-glass focus:border-blue-400 focus:from-white/15 focus:to-white/10',
   };
 
   return (

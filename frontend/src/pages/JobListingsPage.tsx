@@ -92,6 +92,11 @@ const JobListingsPage: React.FC = () => {
     loadJobs();
   }, []);
 
+  // Apply filters when sortBy changes
+  useEffect(() => {
+    filterJobs(searchTerm, selectedFilters);
+  }, [sortBy]);
+
   const jobTypes = ['Full-time', 'Part-time', 'Contract', 'Internship'];
   const locations = ['Remote', 'San Francisco, CA', 'New York, NY', 'Mountain View, CA', 'Austin, TX'];
   const salaryRanges = ['$50k+', '$100k+', '$150k+', '$200k+'];
@@ -216,7 +221,8 @@ const JobListingsPage: React.FC = () => {
           
           if (response.data.results) {
             setJobs(response.data.results);
-            setFilteredJobs(response.data.results);
+            // Apply filters immediately after loading
+            filterJobs(searchTerm, selectedFilters);
           } else {
             throw new Error('Invalid response format');
           }
@@ -230,12 +236,11 @@ const JobListingsPage: React.FC = () => {
       
       loadJobs();
     }
-    
-    // Apply local filters
-    filterJobs(searchTerm, selectedFilters);
   };
 
   const filterJobs = (search: string, filters: typeof selectedFilters) => {
+    console.log('Filtering jobs with:', { search, filters, sortBy });
+    
     let filtered = jobs.filter(job => {
       const matchesSearch = search === '' || job.title.toLowerCase().includes(search.toLowerCase()) ||
                           job.company.toLowerCase().includes(search.toLowerCase()) ||
@@ -260,6 +265,7 @@ const JobListingsPage: React.FC = () => {
         break;
     }
 
+    console.log('Filtered jobs count:', filtered.length);
     setFilteredJobs(filtered);
   };
 
@@ -305,13 +311,12 @@ const JobListingsPage: React.FC = () => {
         <div className="mb-8">
           <div className="flex flex-col lg:flex-row gap-4 mb-6">
             <div className="flex-1">
-              <div className="flex gap-2">
+              <div className="flex gap-2 text-black">
                 <Input
                   placeholder={loading ? "Searching..." : "Search jobs, companies, or skills..."}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   icon={<Search size={20} />}
-                  variant="glass"
                   disabled={loading}
                 />
                 <Button
@@ -550,7 +555,7 @@ const JobListingsPage: React.FC = () => {
 
           {/* Sidebar */}
           <div className="space-y-6">
-            {/* Quick Stats */}
+            {/* Quick Stats
             <Card variant="glass" className="p-6">
               <h3 className="text-lg font-semibold text-white mb-4">
                 Your Job Search
@@ -569,7 +574,7 @@ const JobListingsPage: React.FC = () => {
                   <span className="text-white font-semibold">0</span>
                 </div>
               </div>
-            </Card>
+            </Card> */}
 
             {/* Top Skills */}
             <Card variant="glass" className="p-6">

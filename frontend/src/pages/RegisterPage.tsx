@@ -141,7 +141,7 @@ const RegisterPage: React.FC = () => {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6 }}
         >
-          <Card variant="liquid" className="p-8">
+          <Card  className="p-8">
             <div className="text-center mb-8">
               <img 
                 src="/horizonLogo.png" 
@@ -173,7 +173,7 @@ const RegisterPage: React.FC = () => {
                   error={errors.firstName}
                   icon={<User size={18} />}
                   placeholder="John"
-                  variant="glass"
+                  // variant="glass"
                 />
                 <Input
                   label="Last Name"
@@ -184,7 +184,7 @@ const RegisterPage: React.FC = () => {
                   error={errors.lastName}
                   icon={<User size={18} />}
                   placeholder="Doe"
-                  variant="glass"
+                  // variant="glass"
                 />
               </div>
 
@@ -197,7 +197,7 @@ const RegisterPage: React.FC = () => {
                 error={errors.email}
                 icon={<Mail size={18} />}
                 placeholder="john@example.com"
-                variant="glass"
+                // variant="glass"
               />
 
               <div className="relative">
@@ -210,7 +210,7 @@ const RegisterPage: React.FC = () => {
                   error={errors.password}
                   icon={<Lock size={18} />}
                   placeholder="Create a strong password"
-                  variant="glass"
+                  // variant="glass"
                 />
                 <button
                   type="button"
@@ -255,7 +255,7 @@ const RegisterPage: React.FC = () => {
                   error={errors.confirmPassword}
                   icon={<Lock size={18} />}
                   placeholder="Confirm your password"
-                  variant="glass"
+                  // variant="glass"
                 />
                 <button
                   type="button"
