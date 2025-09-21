@@ -19,20 +19,20 @@ from dotenv import load_dotenv
 from motor.motor_asyncio import AsyncIOMotorClient
 
 # load env
-load_dotenv(dotenv_path='../../.env')
+load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("career-generator")
 
 # -----------------------------
 # Config (env)
 # -----------------------------
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY","AIzaSyAxnpSVprS68cBVHcOFq1WXdhIzAI0tPxg")
 GENAI_MODEL = os.getenv("GENAI_MODEL", "gemini-2.5-flash-lite")
 GENAI_TIMEOUT = float(os.getenv("GENAI_TIMEOUT", "20"))
 GENAI_MAX_TOKENS = int(os.getenv("GENAI_MAX_TOKENS", "10000"))
 
 MONGODB_URI = os.getenv("MONGODB_URI")
-MONGODB_DB = os.getenv("MONGODB_DB")
+MONGODB_DB = os.getenv("MONGODB_DB","users_db")
 
 if not GEMINI_API_KEY:
     raise RuntimeError("GENAI_API_KEY environment variable is required. Set it before starting the app.")
@@ -663,42 +663,10 @@ async def generate_for_user(user_id: str, max_retries: int = 4) -> dict:
 # -----------------------------
 # Endpoints
 # -----------------------------
-@app.post("/batch-generate")
-async def batch_generate():
-    # fetch users from MongoDB; change filter as needed
-    users = await users_collection.find().to_list(length=1000)
-    if not users:
-        return {"count": 0, "results": []}
-    # call generate_for_user by id for each user
-    tasks = [generate_for_user(u.get("id") or u.get("user_id")) for u in users]
-    results = await asyncio.gather(*tasks)
-    return {"count": len(results), "results": results}
-
-@app.post("/generate/{user_id}")
-async def generate_one(user_id: str):
-    result = await generate_for_user(user_id)
-    if result.get("status") == "error":
-        raise HTTPException(status_code=500, detail=result.get("error", "generation failed"))
-    return result
-
-@app.get("/health")
-def health():
-    return {"status": "ok", "time": datetime.datetime.utcnow().isoformat() + "Z"}
 
 # -----------------------------
 # Startup tasks (ensure index on users.id for fast lookups)
 # -----------------------------
-@app.on_event("startup")
-async def startup_tasks():
-    try:
-        await users_collection.create_index("id", unique=True)
-        # index ctrees.id for quick lookup; not unique because you may want multiple versions
-        await ctrees_collection.create_index("id", unique=False)
-        # index failure logs
-        await ctree_failures.create_index("id", unique=False)
-        logger.info("Ensured index on users.id, ctrees.id and ctree_failures.id")
-    except Exception as e:
-        logger.warning("Index creation failed or already exists: %s", e)
 
 # -----------------------------
 # Notes:
