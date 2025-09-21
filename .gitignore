@@ -11,3 +11,6 @@ __pycache__
 data
 external
 testing
+
+/frontend/node_modules/
+/frontend/.cache/
