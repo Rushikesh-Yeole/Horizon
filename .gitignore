@@ -1,0 +1,20 @@
+# venv
+backend/venv/
+backend/venv/
+
+# Python cache
+**/__pycache__/
+*.py[cod]
+
+# Env files
+interface/.env
+interface/node_modules
+backend/.env
+
+# IDEs
+.vscode/
+.idea/
+
+# OS junk
+.DS_Store
+Thumbs.db
