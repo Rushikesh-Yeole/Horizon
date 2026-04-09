@@ -18,3 +18,4 @@ backend/.env
 # OS junk
 .DS_Store
 Thumbs.db
+*.zip
