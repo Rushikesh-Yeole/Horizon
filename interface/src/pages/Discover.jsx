@@ -7,18 +7,19 @@ import { Search, Zap, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
 export default function Discover() {
   const { token } = useAuth();
   const [criteria, setCriteria] = useState({ 
-    role: "Backend Engineer", 
+    role: "Frontend Engineer", 
     location: "Bangalore", 
-    companies: "Google, Uber" 
+    companies: "Google" 
   });
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
 
   const runPhysicsEngine = async () => {
-    if (!token) {
-        alert("Session expired. Please re-initialize.");
-        return;
-    }
+    // DEV BYPASS: Commented out token check
+    // if (!token) {
+    //     alert("Session expired. Please re-initialize.");
+    //     return;
+    // }
 
     setLoading(true);
     try {
@@ -32,6 +33,18 @@ export default function Discover() {
                   .split(",")
                   .map((c) => c.trim()),
               },
+              // DEV BYPASS: Hardcoded user profile for quick iteration
+  "user_profile": {
+    "profile": {
+      "skills": ["HTML", "CSS", "Next.js", "Tailwind", "Algorithms", "Data structures", "Java", "SQL", "Spring Boot", "Python", "C++", "React.js", "Node.js", "Express", "MongoDB", "Tailwind CSS", "Redux"],
+      "projects": [
+        {"title": "E-commerce Storefront", "desc": "Built fully responsive frontend with React and Redux state management"},
+        {"title": "FMCG retail Management System", "desc": "Developed Node/Express backend with MongoDB aggregation pipelines"}
+      ],
+      "preferences": {"role": "Backend Engineer"},
+      "experience": ["SDE Intern at Amazon India - 6 months"]
+    }
+  }
             }
       );
       setResults(res.data.guidance_cards);
@@ -50,7 +63,7 @@ export default function Discover() {
       <div className="flex justify-between items-end mb-10">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Discovery Search</h1>
-          <p className="text-secondary">Multi-Agent search for candidate-role fit.</p>
+          <p className="text-secondary">Multi-Layer deterministic search for candidate-role fit.</p>
         </div>
       </div>
 
@@ -68,7 +81,7 @@ export default function Discover() {
         <div className="md:col-span-1 flex items-center pt-2">
           <Button onClick={runPhysicsEngine} isLoading={loading} className="w-full h-12">
             {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2 inline" /> : <Search className="w-4 h-4 mr-2 inline" />} 
-            Audit Fit
+            Search
           </Button>
         </div>
       </div>
@@ -114,10 +127,10 @@ export default function Discover() {
               {/* Gap & Action Analysis */}
               <div>
                 <h3 className="text-[12px] font-bold uppercase text-secondary mb-3 mt-5 flex items-center tracking-widest">
-                  <AlertTriangle className="w-3 h-3 mr-1.5"/> Friction Points
+                  <AlertTriangle className="w-3 h-3 mr-1.5"/> Skill Gaps
                 </h3>
                 <div className="flex flex-wrap gap-1.5 mb-6">
-                  {card.user_skill_gaps.length > 0 ? card.user_skill_gaps.map(gap => (
+                  {card.user_skill_gaps?.length > 0 ? card.user_skill_gaps.map(gap => (
                     <span key={gap} className="px-2.5 py-1 bg-red-50 text-red-700 text-[11px] font-bold rounded-md border border-red-100 uppercase tracking-tight">
                       {gap}
                     </span>
@@ -128,7 +141,7 @@ export default function Discover() {
                   <CheckCircle className="w-3 h-3 mr-1.5"/> Execution Path
                 </h3>
                 <ul className="space-y-3">
-                  {card.actionable_path.map((step, idx) => (
+                  {card.actionable_path?.map((step, idx) => (
                     <li key={idx} className="text-sm text-gray-700 flex items-start leading-tight">
                       <span className="mr-3 font-mono text-gray-300 font-bold">{idx+1}</span> 
                       {step}
@@ -143,7 +156,7 @@ export default function Discover() {
         {/* Empty State */}
         {!results && !loading && (
           <div className="py-20 text-center border-2 border-dashed border-gray-200 rounded-3xl">
-            <p className="text-gray-400 font-medium">Input parameters to query the Agentic Swarm.</p>
+            <p className="text-gray-400 font-medium">Input parameters to query the Search Engine.</p>
           </div>
         )}
       </div>

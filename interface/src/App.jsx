@@ -12,7 +12,8 @@ const NavBar = () => {
   const { pathname } = useLocation();
   const { isAuthenticated, logout } = useAuth();
 
-  if (pathname === '/ingest' && !isAuthenticated) return null;
+  // DEV BYPASS: Commented out so you can always see the nav
+  // if (pathname === '/ingest' && !isAuthenticated) return null;
 
   return (
     <nav className="fixed top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-gray-100">
@@ -39,7 +40,10 @@ const NavBar = () => {
 // 2. Protected Route Wrapper
 const ProtectedRoute = ({ children }) => {
   const { isAuthenticated } = useAuth();
-  return isAuthenticated ? children : <Navigate to="/ingest" replace />;
+  
+  // DEV BYPASS: Always render children, ignore redirect
+  // return isAuthenticated ? children : <Navigate to="/ingest" replace />;
+  return children;
 };
 
 export default function App() {

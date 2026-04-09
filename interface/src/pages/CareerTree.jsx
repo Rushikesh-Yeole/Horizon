@@ -87,7 +87,9 @@ export default function CareerTree() {
   const [expandedPath, setExpandedPath] = useState(null);
 
   const fetchTree = async (isManualRefresh = false) => {
-    if (!token || (isFetchingTreeGlobal && !isManualRefresh)) return;
+    // DEV BYPASS: Commented out the token requirement check
+    // if (!token || (isFetchingTreeGlobal && !isManualRefresh)) return;
+    if (isFetchingTreeGlobal && !isManualRefresh) return;
     
     isFetchingTreeGlobal = true;
     setLoading(true);
@@ -179,7 +181,7 @@ export default function CareerTree() {
                       {isBestFit && <span className="px-2 py-0.5 rounded text-[9px] font-bold bg-green-100 text-green-700 uppercase border border-green-200 flex items-center"><Sparkles size={10} className="mr-1"/> Best Advice</span>}
                     </div>
                     <div className="flex items-center gap-3 text-xs font-medium text-gray-500">
-                      <span className="flex items-center"><Target size={12} className="mr-1" /> {(path.fit_score * 100).toFixed(0)}% Match</span>
+                      <span className="flex items-center"><Target size={12} className="mr-1" /> {(path.fit_score).toFixed(0)}% Match</span>
                       <span className="flex items-center"><Clock size={12} className="mr-1" /> ~{path.stages?.reduce((a, c) => a + c.eta_months, 0)} Months</span>
                     </div>
                   </div>

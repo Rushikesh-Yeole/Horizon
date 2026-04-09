@@ -1,0 +1,53 @@
+{
+  "user_profile": {
+    "profile": {
+      "skills": ["React.js", "Node.js", "Express", "MongoDB", "Tailwind CSS", "Redux"],
+      "projects": [
+        {"title": "E-commerce Storefront", "desc": "Built fully responsive frontend with React and Redux state management"},
+        {"title": "Local NGO Management System", "desc": "Developed Node/Express backend with MongoDB aggregation pipelines"}
+      ],
+      "preferences": {"role": "Full Stack Developer"}
+    }
+  },
+  "search_criteria": {
+    "role": "Full Stack Engineer",
+    "target_companies": ["Razorpay", "Zepto", "Groww"],
+    "location": "Bangalore"
+  }
+}
+
+{
+  "user_profile": {
+    "profile": {
+      "skills": ["Python", "LangChain", "OpenAI API", "HuggingFace", "Streamlit", "Pandas"],
+      "projects": [
+        {"title": "PDF Chatbot", "desc": "Built a RAG pipeline using LangChain and Pinecone to chat with financial documents"},
+        {"title": "Sentiment Analyzer", "desc": "Prompt-engineered GPT-4 for classifying customer support tickets"}
+      ],
+      "preferences": {"role": "AI/ML Engineer"}
+    }
+  },
+  "search_criteria": {
+    "role": "AI Engineer",
+    "target_companies": ["OpenAI", "Cohere", "Sarvam AI"],
+    "location": "Remote"
+  }
+}
+
+{
+  "user_profile": {
+    "profile": {
+      "skills": ["Python", "SQL", "Power BI", "Excel", "Pandas", "Data Visualization"],
+      "projects": [
+        {"title": "Sales Dashboard", "desc": "Built interactive Power BI dashboards tracking KPIs across regions"},
+        {"title": "Customer Segmentation", "desc": "Used clustering techniques in Python to identify high-value users"}
+      ],
+      "preferences": {"role": "Data Analyst"}
+    }
+  },
+  "search_criteria": {
+    "role": "Data Analyst",
+    "target_companies": ["PhonePe", "CRED", "Meesho"],
+    "location": "Bangalore"
+  }
+}

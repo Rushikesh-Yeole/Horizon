@@ -1,243 +1,291 @@
 import os
+import ast
 import json
 import logging
 import asyncio
 import datetime
 from typing import List, Optional, Dict, Any, Tuple
 
-from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+from pydantic import BaseModel, Field
 from tavily import TavilyClient
 
-# --- SETUP ---
+import neo_graph as graph
+
 load_dotenv()
-logger = logging.getLogger(" Serendipty Engine ")
-logging.basicConfig(level=logging.INFO)
+log = logging.getLogger("tree")
 
-API_KEY = os.getenv("GEMINI_API_KEY")
-TAVILY_KEYS = [k.strip() for k in (os.getenv("TAVILY_API_KEY") or "").split(",") if k.strip()]
-REDIS_URL = os.getenv("REDIS_URL")
+_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+_tavily = TavilyClient(api_key=os.getenv("TAVILY_API_KEY", "").split(",")[0])
+MODEL = "gemini-2.5-flash-lite"
+CACHE_TTL = 86400
 
-if not API_KEY or not TAVILY_KEYS:
-    raise ValueError("Missing API Keys")
+BIO_DOMAINS = [
+    "reddit.com", "news.ycombinator.com", "teamblind.com", "indiehackers.com",
+    "linkedin.com", "medium.com", "substack.com", "github.com",
+    "netflixtechblog.com", "engineering.fb.com", "openai.com/research",
+]
 
-# --- 1. THE DATA SCHEMA ---
+
+# Schemas
+
 class Opportunity(BaseModel):
-    title: str = Field(..., description="Concrete next step")
-    url: Optional[str] = Field(None, description="Direct link if found")
-    snippet: str = Field(..., description="Why this fits")
+    title: str
+    url: Optional[str] = None
+    snippet: str = Field(..., description="Why this matches the candidate's trajectory.")
+
 
 class Stage(BaseModel):
-    name: str = Field(..., description="CONCRETE Role/Checkpoint")
-    description: str = Field(..., description="Context")
-    eta_months: int = Field(..., description="Timeline")
-    skill_requirements: List[str] = Field(..., description="Hard skills")
-    citations: List[str] = Field(..., description="List of 'SOURCE_REF_X' tags that prove this step.")
-    top_opportunities: List[Opportunity] = Field(..., description="Gateway opportunities")
+    name: str = Field(..., description="Concrete role or milestone title.")
+    description: str
+    eta_months: int
+    skill_requirements: List[str]
+    citations: List[str] = Field(..., description="SOURCE_REF_X tags from evidence.")
+    top_opportunities: List[Opportunity]
+
 
 class PathBranch(BaseModel):
     id: str
-    title: str = Field(..., description="The Archetype Name")
-    summary: str = Field(..., description="Philosophy")
-    fit_score: float = Field(..., description="Match Score")
+    title: str = Field(..., description="Career archetype name.")
+    summary: str = Field(..., description="Long-term destination and honest probability assessment.")
+    fit_score: float
     stages: List[Stage]
+
 
 class CareerTree(BaseModel):
     user_id: str
     generated_at: str
     paths: List[PathBranch]
+    observed_paths: List[List[str]] = Field(
+        default_factory=list,
+        description=(
+            "Real career progressions extracted ONLY from evidence sources — zero hallucination. "
+            "Each inner array is an ordered sequence of role titles from junior to senior "
+            "as seen in the injected Tavily content. E.g. ['SWE Intern', 'SWE II', 'Senior SWE', 'Staff SWE']."
+        ),
+    )
 
-# --- 2. THE ENGINE ---
-class CareerTreeEngine:
-    def __init__(self):
-        self.client = genai.Client(api_key=API_KEY)
-        self.model_name = "gemini-2.5-flash" 
-        self.tavily = TavilyClient(api_key=TAVILY_KEYS[0]) 
-        self.cache_ttl = 86400
 
-        self.target_domains = [
-            "reddit.com", "news.ycombinator.com", "teamblind.com", "lobste.rs", 
-            "indiehackers.com", "linkedin.com", "read.cv", "polywork.com",
-            "uber.com/blog", "netflixtechblog.com", "engineering.fb.com", 
-            "openai.com/research", "research.google", "blogs.microsoft.com",
-            "medium.com", "substack.com", "github.com"
+# Pipeline
+
+async def _get_archetypes(skills: List[str]) -> Tuple[List[str], List[List[str]]]:
+    """
+    Graph-first archetype discovery with trajectory traversal.
+    Returns (tavily_queries, known_trajectories).
+    known_trajectories are injected into synthesis as prior context.
+    Falls back to LLM if graph has insufficient data.
+    """
+    try:
+        records = await graph.find_trajectories(skills, limit=5)
+        if len(records) < 5:
+            log.warning("Graph returned <5 trajectory matches — falling back to LLM.")
+            return await _archetypes_from_llm(skills), []
+
+        queries = [
+            f"{rec['terminal']} career path site:reddit.com OR site:teamblind.com"
+            for rec in records
         ]
+        trajectories = [rec["trajectory"] for rec in records if len(rec["trajectory"]) > 1]
+        log.info(f"Graph trajectories: {[r['trajectory'] for r in records]}")
+        return queries, trajectories
 
-    def _generate_custom_archetypes(self, profile_summary: str) -> List[str]:
-        logger.info("🔮 Generating Custom Archetypes (North Stars)...")
-        prompt = f"""
-        **OBJECTIVE:** Predict 3 distinct "Career North Stars" for this User.
-        **USER DNA:** {profile_summary}
-        
-        **CRITICAL RULES for TITLES:**
-        1. DO NOT include tech-stack keywords (e.g., No "Python", "Node.js", "Redis").
-        2. Each title must represent a long-term career destination, not just a current job.
-        3. Get best-case future scenarios for user, Be Opinionated.
-        4. The future career options may be in Corporate, Entrepreneurship, Management, Deep Tech, Academia, etc. Be Open to Best possible Futures suited & aligned to user.
+    except Exception as e:
+        log.warning(f"Graph traversal failed: {e}")
+        return await _archetypes_from_llm(skills), []
 
-        **OUTPUT:** Return ONLY a Python list of 3 specific Search Queries for Tavily.
-        Example: ["Infrastructure Lead career path reddit", "Staff Systems Engineer biography", "CTO roadmap for backend developers"]
-        """
+
+async def _archetypes_from_llm(skills: List[str]) -> List[str]:
+    log.info("Generating archetypes via LLM fallback.")
+    prompt = f"""Predict 4 distinct long-term career destinations (5-10 year horizon) for someone with these skills: {skills}
+
+Rules:
+- Each path must be architecturally different (IC track, founder, domain specialist, etc.)
+- Be opinionated — match paths to the actual skill signal, not generic mappings
+- No tech stack names in archetype titles
+
+Return ONLY a JSON array of 3 Tavily search queries targeting real career stories and biographies:
+["Staff Engineer at fintech career path reddit", "ML infrastructure founder journey indiehackers", "Engineering Manager FAANG teamblind"]"""
+
+    resp = await asyncio.to_thread(
+        _client.models.generate_content,
+        model=MODEL,
+        contents=prompt,
+        config=types.GenerateContentConfig(temperature=0.4),
+    )
+    text = resp.text.strip()
+    if "```" in text:
+        text = text.split("```")[1].replace("json", "").replace("python", "").strip()
+    try:
+        return json.loads(text)
+    except Exception:
         try:
-            response = self.client.models.generate_content(
-                model=self.model_name,
-                contents=prompt,
-                config=types.GenerateContentConfig(temperature=0.4)
+            return ast.literal_eval(text)
+        except Exception:
+            return [f"senior software engineer career path {skills[:2]}"] * 3
+
+
+async def _fetch_evidence(queries: List[str]) -> Tuple[str, Dict[str, str]]:
+    """Fetch real career stories for each archetype in parallel."""
+    log.info(f"Fetching evidence for {len(queries)} archetypes...")
+
+    async def fetch(q: str) -> List[Dict]:
+        try:
+            res = await asyncio.to_thread(
+                _tavily.search,
+                query=q,
+                search_depth="advanced",
+                include_domains=BIO_DOMAINS,
+                max_results=14,
             )
-            text = response.text.strip()
-            if text.startswith("```python"): text = text.split("```python")[1].split("```")[0]
-            result = eval(text)
-            logger.info(f"✅ Generated Archetypes: {result}")
-            return result
+            return res.get("results", [])
         except Exception as e:
-            logger.error(f"❌ Archetype Generation Failed: {e}")
-            return [f"Career path for {profile_summary[:20]} reddit"] * 3
+            log.error(f"Tavily error for '{q}': {e}")
+            return []
 
-    # --- CHANGED: Returns (Evidence Text, URL Map) ---
-    async def _fetch_biographies(self, queries: List[str]) -> Tuple[str, Dict[str, str]]:
-        logger.info(f"🕵️  Fetching Biographies for {len(queries)} queries...")
-        combined_evidence = ""
-        url_map = {} # Maps 'SOURCE_REF_0' -> '[https://reddit.com/](https://reddit.com/)...'
-        
-        async def fetch(q):
-            try:
-                res = await asyncio.to_thread(
-                    self.tavily.search,
-                    query=q,
-                    search_depth="advanced",
-                    include_domains=self.target_domains,
-                    max_results=14
-                )
-                return res.get("results", [])
-            except Exception as e:
-                logger.error(f"⚠️ Search Error for '{q}': {e}")
-                return []
+    batches = await asyncio.gather(*[fetch(q) for q in queries])
 
-        results = await asyncio.gather(*[fetch(q) for q in queries])
-        
-        global_idx = 0
-        total_items = 0
-        for i, result_batch in enumerate(results):
-            combined_evidence += f"<ARCHETYPE_SOURCES query='{queries[i]}'>\n"
-            for item in result_batch:
-                ref_tag = f"SOURCE_REF_{global_idx}"
-                url_map[ref_tag] = item['url'] # Store the real URL
-                
-                combined_evidence += f"[{ref_tag}]: {item['url']}\nTITLE: {item['title']}\nCONTENT: {item['content'][:3000]}...\n\n"
-                combined_evidence += "</ARCHETYPE_SOURCES>\n"
-                global_idx += 1
-                total_items += 1
-        
-        logger.info(f"📚 Evidence Gathered: {total_items} items.")
-        return combined_evidence, url_map
+    evidence = ""
+    url_map: Dict[str, str] = {}
+    idx = 0
 
-    async def _synthesize_tree(self, user_id: str, profile_summary: str, evidence_text: str) -> Dict[str, Any]:
-        logger.info("🧬 Synthesizing Career Tree Structure...")
-        prompt = f"""
-        ### 🧠 SYSTEM: THE CAREER META-ANALYST
-        **USER PROFILE:** {profile_summary}
-        **EVIDENCE LOCKER:**
-        {evidence_text}
+    for i, results in enumerate(batches):
+        evidence += f"<ARCHETYPE_SOURCES query='{queries[i]}'>\n"
+        for item in results:
+            ref = f"SOURCE_REF_{idx}"
+            url_map[ref] = item["url"]
+            evidence += f"[{ref}]: {item['url']}\nTITLE: {item['title']}\nCONTENT: {item['content'][:3000]}\n\n"
+            idx += 1
+        evidence += "</ARCHETYPE_SOURCES>\n"
 
-        ### ⚡ MISSION
-        Construct 3 Distinct Career Paths based on **OVERLAPPING PATTERNS**.
+    log.info(f"Evidence gathered: {idx} sources.")
+    return evidence, url_map
 
-        ### 💎 CITATION RULES (CRITICAL)
-        1. **USE TAGS:** In the `citations` list, use the exact tags found in evidence: `["SOURCE_REF_0", "SOURCE_REF_5"]`.
-        2. Include at least 4-5 diverse relevant citations for every stage to maximize evidence.
-        3. **TRIANGULATE:** Do not invent stages. 
-        4. Do not make stage contents/advice very abstracted or generic, make it as precise, personlaized, citations grounded and Oponionated as possible. Mention few exact Company/Institution/Universty names too in each stage wherein the opportunity lies best, for that stage respectively, grounded in citations.
 
-        ### OUTPUT
-        Return valid JSON matching the `CareerTree` schema.
-        """
+async def _synthesize(
+    user_id: str,
+    profile: str,
+    evidence: str,
+    known_trajectories: List[List[str]],
+) -> Dict[str, Any]:
+    """
+    Generate career tree grounded in evidence.
+    known_trajectories from the graph are injected as validated prior paths.
+    Also extracts observed_paths from evidence to feed back into the graph.
+    """
+    log.info("Synthesizing career tree...")
 
-        try:
-            response = await asyncio.to_thread(
-                self.client.models.generate_content,
-                model=self.model_name,
-                contents=prompt,
-                config=types.GenerateContentConfig(
-                    response_mime_type="application/json",
-                    response_schema=CareerTree,
-                    temperature=0.1
-                )
-            )
-            logger.info("✅ Tree Synthesis Complete.")
-            return response.parsed.model_dump()
-        except Exception as e:
-            logger.error(f"❌ Synthesis Failed: {e}")
-            return {"status": "error", "message": str(e)}
+    prior_ctx = ""
+    if known_trajectories:
+        formatted = "\n".join(f"  {i+1}. {' → '.join(t)}" for i, t in enumerate(known_trajectories))
+        prior_ctx = f"""
+GRAPH PRIOR — validated career progressions from historical data (use as reference, not constraint):
+{formatted}
+Search evidence for better/alternative paths if they exist.
+"""
 
-    async def generate_for_user(self, user_id: str, user_doc: Dict[str, Any], redis_client) -> Dict[str, Any]:
-        logger.info(f"🚀 [Start] Career Tree for User: {user_id}")
-        cache_key = f"horizon:tree_bio_v5:{user_id}" # Bumped Version
-        
-        if redis_client:
-            cached = await redis_client.get(cache_key)
-            if cached:
-                logger.info("♻️  Returning Cached Tree")
-                return json.loads(cached)
+    prompt = f"""You are a career intelligence analyst. Build a 5-path roadmap grounded strictly in the evidence below.
 
-        # 1. Adapt Profile
-        profile = user_doc.get("profile", {})
-        parsed_resume = user_doc.get("resume", {}).get("parsed_data", {})
-        skills = list(set((profile.get("skills", []) or []) + (parsed_resume.get("skills", []) or [])))
-        projects = (profile.get("projects", []) or []) + (parsed_resume.get("projects", []) or [])
-        project_titles = [p.get("title") for p in projects if isinstance(p, dict)]
-        
-        profile_summary = f"""
-        Role: {profile.get('preferences', {}).get('role', 'AI Engineer')}
-        Interests: {profile.get('preferences', {}).get('interests', ['AI', 'ML', 'Data Science', 'Social Networks', 'Metaverse'])}
-        Skills: {skills[:15]}
-        Project History: {project_titles}
-        """
-        logger.info(f"📝 Profile Summary Built (Length: {len(profile_summary)})")
+CANDIDATE:
+{profile}
+{prior_ctx}
+EVIDENCE:
+{evidence}
 
-        # 2. Run Pipeline
-        archetypes = self._generate_custom_archetypes(profile_summary)
-        
-        # Get Evidence AND the Map
-        evidence, url_map = await self._fetch_biographies(archetypes)
-        
-        tree_data = await self._synthesize_tree(user_id, profile_summary, evidence)
-        
-        if "status" in tree_data and tree_data["status"] == "error":
-            logger.error("🛑 Pipeline Aborted due to Synthesis Error")
-            return tree_data
+Rules for paths:
+- Minimum 4 stages per path. Every stage must be triangulated from ≥3 evidence sources — cite with exact SOURCE_REF tags
+- Name specific companies, programs, or platforms per stage — no generic advice
+- skill_requirements: concrete technologies and tools only
+- eta_months: realistic based on evidence patterns
+- top_opportunities: real roles or programs matching this stage right now
+- fit_score: (Range 0-100%) cold probability accounting for skill gaps and market reality — not encouragement
+- summary: destination + why this candidate might realistically reach it + the single biggest obstacle
 
-        # 3. RESOLVE REFERENCES (The Fix)
-        # Swap 'SOURCE_REF_0' with 'https://...'
-        logger.info("🔗 Resolving Citations...")
-        try:
-            resolved_count = 0
-            for path in tree_data.get('paths', []):
-                for stage in path.get('stages', []):
-                    resolved_citations = []
-                    for cit in stage.get('citations', []):
-                        # Clean up potential brackets from LLM (e.g., "[SOURCE_REF_0]")
-                        clean_ref = cit.replace("[", "").replace("]", "").strip()
-                        
-                        if clean_ref in url_map:
-                            resolved_citations.append(url_map[clean_ref])
-                            resolved_count += 1
-                        elif cit.startswith("http"):
-                            resolved_citations.append(cit)
-                    
-                    stage['citations'] = resolved_citations
-            logger.info(f"✅ Resolved {resolved_count} citations.")
-        except Exception as e:
-            logger.error(f"Citation Resolution Failed: {e}")
+Rules for observed_paths:
+- Extract ONLY career progressions that are explicitly described in the evidence sources
+- Each array = one person's or one archetype's role sequence in chronological order
+- Minimum 3 roles per sequence, maximum 8
+- Role titles must be as they appear in the evidence — no paraphrasing or invention
+- If evidence has no clear sequences, return an empty array — do not hallucinate
 
-        # 4. Cache & Return
-        tree_data["generated_at"] = datetime.datetime.utcnow().isoformat()
-        if redis_client:
-            await redis_client.setex(cache_key, self.cache_ttl, json.dumps(tree_data))
-            logger.info("💾 Tree Cached to Redis")
-            
-        return tree_data
+Return valid JSON matching the CareerTree schema exactly."""
 
-# Singleton
-engine = CareerTreeEngine()
+    resp = await asyncio.to_thread(
+        _client.models.generate_content,
+        model=MODEL,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            response_mime_type="application/json",
+            response_schema=CareerTree,
+            temperature=0.1,
+        ),
+    )
+    log.info("Synthesis done.")
+    return resp.parsed.model_dump()
+
+
+def _resolve_citations(tree: Dict[str, Any], url_map: Dict[str, str]) -> int:
+    count = 0
+    for path in tree.get("paths", []):
+        for stage in path.get("stages", []):
+            resolved = []
+            for ref in stage.get("citations", []):
+                clean = ref.strip("[] ")
+                if clean in url_map:
+                    resolved.append(url_map[clean])
+                    count += 1
+                elif ref.startswith("http"):
+                    resolved.append(ref)
+            stage["citations"] = resolved
+    return count
+
+
+# ── Entry Point ───────────────────────────────────────────────────────────────
+
+async def generate_tree(user_id: str, user_doc: Dict[str, Any], redis_client) -> Dict[str, Any]:
+    """
+    Full pipeline: graph trajectories → evidence → synthesis → citation resolution → graph learning.
+    Each run feeds observed career paths back into the graph, making future traversals smarter.
+    """
+    cache_key = f"horizon:tree:v7:{user_id}"
+
+    if redis_client:
+        cached = await redis_client.get(cache_key)
+        if cached:
+            log.info("Returning cached tree.")
+            return json.loads(cached)
+
+    p = user_doc.get("profile", {})
+    parsed = user_doc.get("resume", {}).get("parsed_data", {})
+    skills = list(set((p.get("skills") or []) + (parsed.get("skills") or [])))
+    projects = (p.get("projects") or []) + (parsed.get("projects") or [])
+    project_titles = [x.get("title") for x in projects if isinstance(x, dict)]
+
+    profile = (
+        f"Target role: {p.get('preferences', {}).get('role', 'Software Engineer')}\n"
+        f"Interests: {p.get('preferences', {})}\n"
+        f"Skills: {skills[:15]}\n"
+        f"Projects: {project_titles}"
+    )
+
+    queries, known_trajectories = await _get_archetypes(skills)
+    evidence, url_map = await _fetch_evidence(queries)
+    tree = await _synthesize(user_id, profile, evidence, known_trajectories)
+
+    resolved = _resolve_citations(tree, url_map)
+    log.info(f"Citations resolved: {resolved}")
+
+    # Feed extracted paths back into the graph — learning loop
+    observed = tree.pop("observed_paths", [])
+    if observed:
+        await graph.evolve_paths(observed)
+        log.info(f"Graph learned {len(observed)} new career tracks from this synthesis.")
+
+    tree["generated_at"] = datetime.datetime.utcnow().isoformat()
+
+    if redis_client:
+        await redis_client.setex(cache_key, CACHE_TTL, json.dumps(tree))
+        log.info("Tree cached.")
+
+    return tree

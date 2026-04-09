@@ -1,7 +1,5 @@
 from pydantic import BaseModel
-from typing import List, Any, Dict, Optional, Literal
-
-from datetime import datetime
+from typing import List, Any, Dict, Optional
 
 
 class Education(BaseModel):
@@ -21,9 +19,9 @@ class Profile(BaseModel):
     linkedin_link: Optional[str] = None
     github_link: Optional[str] = None
     preferences: Optional[dict] = None
-    skills: Optional[list[str]] = None
-    education: Optional[list[Education]] = None
-    projects: Optional[list[Project]] = None
+    skills: Optional[List[str]] = None
+    education: Optional[List[Education]] = None
+    projects: Optional[List[Project]] = None
 
 
 class Personality(BaseModel):
