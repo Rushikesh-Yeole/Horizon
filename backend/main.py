@@ -10,25 +10,28 @@ import bcrypt
 from contextlib import asynccontextmanager
 from typing import List, Optional, Dict, Any
 
-from fastapi import FastAPI, Depends, HTTPException, Header, UploadFile, File
+from fastapi import FastAPI, Depends, HTTPException, Header, UploadFile, File, Request
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
+import random
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 import redis.asyncio as aioredis
 from tavily import TavilyClient
 from dotenv import load_dotenv
 
+load_dotenv()
+
 from onboarding.mbti_questionnare import prepare_questions, evaluate_answers
 from onboarding.user import insert_user_to_db, get_user_by_email
 from onboarding.models import RegisterReq, Answers, User, LoginReq
-from onboarding.parse_resume import parse_resume
+from onboarding.resume import resume_router
 
 import ops
 import neo_graph as graph
 from discover import generate_cards
 from tree import generate_tree
 
-load_dotenv()
 logging.basicConfig(level=logging.INFO)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("neo4j.notifications").setLevel(logging.ERROR)
@@ -47,23 +50,74 @@ async def lifespan(app: FastAPI):
     _redis = aioredis.from_url(os.getenv("REDIS_URL"), encoding="utf-8", decode_responses=True)
     await graph.setup()
     yield
+    await graph.close()
     await _redis.aclose()
     log.info("Shutdown complete.")
 
 
 app = FastAPI(title="Horizon Intelligence Platform", version="2.0.0", lifespan=lifespan)
 
+prod_origin = os.getenv("PROD_FRONTEND_URL")
+origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+if prod_origin:
+    origins.append(prod_origin)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["x-credits-remaining", "x-cost-this-run"],
 )
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 
 def get_redis() -> aioredis.Redis:
     return _redis
+
+
+@app.middleware("http")
+async def metering_middleware(request: Request, call_next):
+    ops.current_request_cost.set([0.0])
+    session_id = request.headers.get("x-demo-session-id")
+    if not session_id:
+        return await call_next(request)
+        
+    rc = get_redis()
+    if not rc:
+        return await call_next(request)
+        
+    key = f"horizon:metering:{session_id}"
+    balance_str = await rc.get(key)
+    if balance_str is None:
+        await rc.set(key, 100.0)
+        balance = 100.0
+    else:
+        balance = float(balance_str)
+        
+    if balance <= 0.0:
+        return JSONResponse({"detail": "Payment Required"}, status_code=402)
+        
+    response = await call_next(request)
+    
+    cost_in_inr = ops.current_request_cost.get()[0]
+    # 1 credit = roughly 0.01 INR? Wait, what ratio? 
+    # If cost is 0.03 INR, and ratio is 100, then credits_used = 3.0 credits.
+    # The previous code used CREDIT_USD_RATIO which is misleading if cost is in INR.
+    # Let's fix the env variable name to CREDIT_MULTIPLIER as the user previously used.
+    # Let's check what it was in demo_metering_middleware: os.getenv("CREDIT_MULTIPLIER", "1.0")
+    # We will stick to CREDIT_MULTIPLIER.
+    multiplier = float(os.getenv("CREDIT_MULTIPLIER", "1.0"))
+    credits_used = cost_in_inr * multiplier
+    
+    new_balance = await rc.incrbyfloat(key, -credits_used)
+    
+    response.headers["x-credits-remaining"] = str(round(new_balance, 2))
+    response.headers["x-cost-this-run"] = str(round(credits_used, 2))
+    
+    return response
 
 
 async def get_current_user(authorization: str = Header(None)) -> str:
@@ -82,6 +136,7 @@ async def get_current_user(authorization: str = Header(None)) -> str:
     except Exception:
         raise HTTPException(401, "Auth failed.")
 
+app.include_router(resume_router, prefix="/auth")
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
@@ -92,7 +147,15 @@ async def register(user: RegisterReq):
             return JSONResponse({"msg": "User already exists."}, status_code=400)
         user_id = str(uuid.uuid4())
         hashed = bcrypt.hashpw(user.password.encode(), bcrypt.gensalt()).decode()
-        final_user = User(id=user_id, email=user.email, password=hashed, profile=user.profile, personality=user.personality)
+        avatar_idx = random.randint(1, 30)
+        final_user = User(
+            id=user_id, 
+            email=user.email, 
+            password=hashed, 
+            avatar_url=f"/static/avatars/{avatar_idx}.svg",
+            profile=user.profile, 
+            personality=user.personality
+        )
         insert_user_to_db(final_user)
         token_data = await ops.issue_token(user_id)
         return JSONResponse({"user_id": user_id, "access_token": token_data["access_token"]})
@@ -108,7 +171,7 @@ async def login(user: LoginReq):
         if not user_data:
             raise HTTPException(404, "User not found.")
         token_data = await ops.issue_token(user_data["id"])
-        return JSONResponse({"user_id": user_data["id"], "access_token": token_data["access_token"]})
+        return JSONResponse({"user_id": user_data["id"], "access_token": token_data["access_token"], "email": user_data["email"]})
     except HTTPException:
         raise
     except Exception as e:
@@ -118,14 +181,38 @@ async def login(user: LoginReq):
 
 # ── Onboarding ────────────────────────────────────────────────────────────────
 
-@app.post("/users/me/resume")
-async def handle_resume(resume: UploadFile = File(...)):
+@app.get("/users/me")
+async def get_me(user_id: str = Depends(get_current_user)):
     try:
-        parsed = parse_resume(file=resume)
-        return JSONResponse({"msg": "Resume processed.", "resume": parsed})
+        user_doc = await ops.users_col.find_one({"id": user_id})
+        if not user_doc:
+            raise HTTPException(404, "User not found.")
+        user_doc.pop("_id", None)
+        user_doc.pop("password", None)
+        return JSONResponse({"user": user_doc})
+    except HTTPException:
+        raise
     except Exception as e:
-        log.error(f"Resume failed: {e}")
-        return JSONResponse({"err": str(e)}, status_code=500)
+        log.error(f"Failed to get user: {e}")
+        raise HTTPException(500, "Internal server error.")
+
+from onboarding.models import Profile
+
+@app.put("/users/me/profile")
+async def update_profile(profile: Profile, user_id: str = Depends(get_current_user)):
+    try:
+        res = await ops.users_col.update_one(
+            {"id": user_id},
+            {"$set": {"profile": profile.model_dump()}}
+        )
+        if res.matched_count == 0:
+            raise HTTPException(404, "User not found.")
+        return JSONResponse({"msg": "Profile updated successfully."})
+    except HTTPException:
+        raise
+    except Exception as e:
+        log.error(f"Failed to update profile: {e}")
+        raise HTTPException(500, "Internal server error.")
 
 
 @app.get("/personality/questions")
@@ -238,14 +325,22 @@ async def _get_market_intel(criteria: SearchCriteria, rc: aioredis.Redis) -> Mar
 # Discover
 
 class DiscoverRequest(BaseModel):
-    user_profile: Optional[Dict[str, Any]] = None
     search_criteria: SearchCriteria
 
 
 @app.post("/discover/search")
-async def discover_search(request: DiscoverRequest, rc: aioredis.Redis = Depends(get_redis)):
+async def discover_search(
+    request: DiscoverRequest, 
+    rc: aioredis.Redis = Depends(get_redis),
+    user_id: str = Depends(get_current_user)
+):
+    user_doc = await ops.users_col.find_one({"id": user_id})
+    if not user_doc:
+        raise HTTPException(404, "User not found.")
+    user_doc.pop("_id", None)
+    
     market = await _get_market_intel(request.search_criteria, rc)
-    cards = await generate_cards(request.user_profile, market.model_dump())
+    cards = await generate_cards(rc, user_doc, market.model_dump())
     return {"guidance_cards": cards}
 
 

@@ -7,8 +7,7 @@ import datetime
 from typing import List, Optional, Dict, Any, Tuple
 
 from dotenv import load_dotenv
-from google import genai
-from google.genai import types
+from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 from tavily import TavilyClient
 
@@ -17,9 +16,9 @@ import neo_graph as graph
 load_dotenv()
 log = logging.getLogger("tree")
 
-_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
+_client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
 _tavily = TavilyClient(api_key=os.getenv("TAVILY_API_KEY", "").split(",")[0])
-MODEL = "gemini-2.5-flash-lite"
+MODEL = os.getenv("OPENROUTER_MODEL", "google/gemini-2.5-flash")
 CACHE_TTL = 86400
 
 BIO_DOMAINS = [
@@ -58,19 +57,19 @@ class CareerTree(BaseModel):
     user_id: str
     generated_at: str
     paths: List[PathBranch]
-    observed_paths: List[List[str]] = Field(
+    observed_paths: List[List[Any]] = Field(
         default_factory=list,
         description=(
             "Real career progressions extracted ONLY from evidence sources — zero hallucination. "
             "Each inner array is an ordered sequence of role titles from junior to senior "
-            "as seen in the injected Tavily content. E.g. ['SWE Intern', 'SWE II', 'Senior SWE', 'Staff SWE']."
+            "as seen in the injected Tavily content. e.g. [['SWE Intern', 0.5], ['SWE I', 1.5], ['Senior', 3.0]]."
         ),
     )
 
 
 # Pipeline
 
-async def _get_archetypes(skills: List[str]) -> Tuple[List[str], List[List[str]]]:
+async def _get_archetypes(skills: List[str], personality: str = "") -> Tuple[List[str], List[List[str]]]:
     """
     Graph-first archetype discovery with trajectory traversal.
     Returns (tavily_queries, known_trajectories).
@@ -81,7 +80,7 @@ async def _get_archetypes(skills: List[str]) -> Tuple[List[str], List[List[str]]
         records = await graph.find_trajectories(skills, limit=5)
         if len(records) < 5:
             log.warning("Graph returned <5 trajectory matches — falling back to LLM.")
-            return await _archetypes_from_llm(skills), []
+            return await _archetypes_from_llm(skills, personality), []
 
         queries = [
             f"{rec['terminal']} career path site:reddit.com OR site:teamblind.com"
@@ -93,47 +92,48 @@ async def _get_archetypes(skills: List[str]) -> Tuple[List[str], List[List[str]]
 
     except Exception as e:
         log.warning(f"Graph traversal failed: {e}")
-        return await _archetypes_from_llm(skills), []
+        return await _archetypes_from_llm(skills, personality), []
 
 
-async def _archetypes_from_llm(skills: List[str]) -> List[str]:
+async def _archetypes_from_llm(skills: List[str], personality: str = "") -> List[str]:
     log.info("Generating archetypes via LLM fallback.")
+    constraint = f"\n- Constraint: Must align with user personality type: {personality}" if personality else ""
     prompt = f"""Predict 4 distinct long-term career destinations (5-10 year horizon) for someone with these skills: {skills}
 
 Rules:
-- Each path must be architecturally different (IC track, founder, domain specialist, etc.)
+- Each path must be architecturally different (IC track, founder, domain specialist, etc.){constraint}
 - Be opinionated — match paths to the actual skill signal, not generic mappings
 - No tech stack names in archetype titles
 
 Return ONLY a JSON array of 3 Tavily search queries targeting real career stories and biographies:
 ["Staff Engineer at fintech career path reddit", "ML infrastructure founder journey indiehackers", "Engineering Manager FAANG teamblind"]"""
 
-    resp = await asyncio.to_thread(
-        _client.models.generate_content,
+    resp = await _client.chat.completions.create(
         model=MODEL,
-        contents=prompt,
-        config=types.GenerateContentConfig(temperature=0.4),
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.4,
     )
-    text = resp.text.strip()
+    text = resp.choices[0].message.content.strip()
     if "```" in text:
         text = text.split("```")[1].replace("json", "").replace("python", "").strip()
     try:
         return json.loads(text)
     except Exception:
-        try:
-            return ast.literal_eval(text)
-        except Exception:
-            return [f"senior software engineer career path {skills[:2]}"] * 3
+        return [f"senior software engineer career path {skills[:2]}"] * 3
 
 
 async def _fetch_evidence(queries: List[str]) -> Tuple[str, Dict[str, str]]:
     """Fetch real career stories for each archetype in parallel."""
     log.info(f"Fetching evidence for {len(queries)} archetypes...")
 
-    async def fetch(q: str) -> List[Dict]:
+    from main import TAVILY_KEYS
+    async def fetch(q: str, attempt: int = 0) -> List[Dict]:
+        if attempt >= len(TAVILY_KEYS):
+            return []
         try:
+            client = TavilyClient(api_key=TAVILY_KEYS[attempt])
             res = await asyncio.to_thread(
-                _tavily.search,
+                client.search,
                 query=q,
                 search_depth="advanced",
                 include_domains=BIO_DOMAINS,
@@ -141,8 +141,8 @@ async def _fetch_evidence(queries: List[str]) -> Tuple[str, Dict[str, str]]:
             )
             return res.get("results", [])
         except Exception as e:
-            log.error(f"Tavily error for '{q}': {e}")
-            return []
+            log.warning(f"Tavily error for '{q}' with key index {attempt}: {e}")
+            return await fetch(q, attempt + 1)
 
     batches = await asyncio.gather(*[fetch(q) for q in queries])
 
@@ -168,6 +168,7 @@ async def _synthesize(
     profile: str,
     evidence: str,
     known_trajectories: List[List[str]],
+    personality: str = "",
 ) -> Dict[str, Any]:
     """
     Generate career tree grounded in evidence.
@@ -185,6 +186,7 @@ GRAPH PRIOR — validated career progressions from historical data (use as refer
 Search evidence for better/alternative paths if they exist.
 """
 
+    constraint = f"\n- Constraint: Roadmap must align with user personality type: {personality}" if personality else ""
     prompt = f"""You are a career intelligence analyst. Build a 5-path roadmap grounded strictly in the evidence below.
 
 CANDIDATE:
@@ -193,7 +195,7 @@ CANDIDATE:
 EVIDENCE:
 {evidence}
 
-Rules for paths:
+Rules for paths:{constraint}
 - Minimum 4 stages per path. Every stage must be triangulated from ≥3 evidence sources — cite with exact SOURCE_REF tags
 - Name specific companies, programs, or platforms per stage — no generic advice
 - skill_requirements: concrete technologies and tools only
@@ -206,23 +208,27 @@ Rules for observed_paths:
 - Extract ONLY career progressions that are explicitly described in the evidence sources
 - Each array = one person's or one archetype's role sequence in chronological order
 - Minimum 3 roles per sequence, maximum 8
+- Extract career progressions. Return array of [role, years_spent] tuples. e.g. [['SWE Intern', 0.5], ['SWE I', 1.5], ['Senior', 3.0]]
 - Role titles must be as they appear in the evidence — no paraphrasing or invention
 - If evidence has no clear sequences, return an empty array — do not hallucinate
 
 Return valid JSON matching the CareerTree schema exactly."""
 
-    resp = await asyncio.to_thread(
-        _client.models.generate_content,
+    resp = await _client.chat.completions.create(
         model=MODEL,
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            response_mime_type="application/json",
-            response_schema=CareerTree,
-            temperature=0.1,
-        ),
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.1,
+        response_format={
+            "type": "json_schema",
+            "json_schema": {
+                "name": "CareerTree",
+                "strict": True,
+                "schema": CareerTree.model_json_schema()
+            }
+        },
     )
     log.info("Synthesis done.")
-    return resp.parsed.model_dump()
+    return json.loads(resp.choices[0].message.content)
 
 
 def _resolve_citations(tree: Dict[str, Any], url_map: Dict[str, str]) -> int:
@@ -258,20 +264,21 @@ async def generate_tree(user_id: str, user_doc: Dict[str, Any], redis_client) ->
 
     p = user_doc.get("profile", {})
     parsed = user_doc.get("resume", {}).get("parsed_data", {})
+    personality = user_doc.get("personality", {}).get("type", "")
     skills = list(set((p.get("skills") or []) + (parsed.get("skills") or [])))
     projects = (p.get("projects") or []) + (parsed.get("projects") or [])
     project_titles = [x.get("title") for x in projects if isinstance(x, dict)]
 
     profile = (
-        f"Target role: {p.get('preferences', {}).get('role', 'Software Engineer')}\n"
-        f"Interests: {p.get('preferences', {})}\n"
+        f"Target role: {(p.get('preferences') or {}).get('role', 'Software Engineer')}\n"
+        f"Interests: {(p.get('preferences') or {})}\n"
         f"Skills: {skills[:15]}\n"
         f"Projects: {project_titles}"
     )
 
-    queries, known_trajectories = await _get_archetypes(skills)
+    queries, known_trajectories = await _get_archetypes(skills, personality)
     evidence, url_map = await _fetch_evidence(queries)
-    tree = await _synthesize(user_id, profile, evidence, known_trajectories)
+    tree = await _synthesize(user_id, profile, evidence, known_trajectories, personality)
 
     resolved = _resolve_citations(tree, url_map)
     log.info(f"Citations resolved: {resolved}")

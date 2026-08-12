@@ -16,7 +16,7 @@ _model = None
 _index = None
 _id_map = None
 
-_mongo = MongoClient(os.getenv("MONGO_URI"))
+_mongo = MongoClient(os.getenv("MONGODB_URI"))
 skills_col = _mongo["kb"]["skills"]
 
 

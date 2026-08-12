@@ -10,6 +10,7 @@ backend/venv/
 interface/.env
 interface/node_modules
 backend/.env
+backend/env.yaml
 
 # IDEs
 .vscode/
@@ -19,3 +20,8 @@ backend/.env
 .DS_Store
 Thumbs.db
 *.zip
+
+# Project Documentation & WIP
+.tmp_pr/
+docs/
+artifacts/

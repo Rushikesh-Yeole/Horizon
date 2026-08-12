@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import axios from 'axios';
+import api from '../services/api';
+import { toast } from 'sonner';
 import { useAuth } from '../context/AuthContext';
 import { Card, Button, Input } from '../components/UI';
 import { Search, Zap, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
@@ -15,16 +16,15 @@ export default function Discover() {
   const [loading, setLoading] = useState(false);
 
   const runPhysicsEngine = async () => {
-    // DEV BYPASS: Commented out token check
-    // if (!token) {
-    //     alert("Session expired. Please re-initialize.");
-    //     return;
-    // }
+    if (!token) {
+        toast.error("Session expired. Please re-initialize.");
+        return;
+    }
 
     setLoading(true);
     try {
-      const res = await axios.post(
-            "http://localhost:8000/discover/search",
+      const res = await api.post(
+            "/discover/search",
             {
               search_criteria: {
                 role: criteria.role,
@@ -32,43 +32,31 @@ export default function Discover() {
                 target_companies: criteria.companies
                   .split(",")
                   .map((c) => c.trim()),
-              },
-              // DEV BYPASS: Hardcoded user profile for quick iteration
-  "user_profile": {
-    "profile": {
-      "skills": ["HTML", "CSS", "Next.js", "Tailwind", "Algorithms", "Data structures", "Java", "SQL", "Spring Boot", "Python", "C++", "React.js", "Node.js", "Express", "MongoDB", "Tailwind CSS", "Redux"],
-      "projects": [
-        {"title": "E-commerce Storefront", "desc": "Built fully responsive frontend with React and Redux state management"},
-        {"title": "FMCG retail Management System", "desc": "Developed Node/Express backend with MongoDB aggregation pipelines"}
-      ],
-      "preferences": {"role": "Backend Engineer"},
-      "experience": ["SDE Intern at Amazon India - 6 months"]
-    }
-  }
+              }
             }
       );
       setResults(res.data.guidance_cards);
     } catch (err) {
       const errorMsg = err.response?.data?.detail || "Physics Engine Stalled. Backend unreachable.";
       console.error("Audit Error:", err);
-      alert(`System Failure: ${errorMsg}`);
+      toast.error(`System Failure: ${errorMsg}`);
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-4xl mx-auto pt-28 pb-20 px-4 animate-fade-in">
+    <div className="max-w-4xl mx-auto pt-24 sm:pt-28 pb-20 px-4 sm:px-6 animate-fade-in">
       {/* Header Section */}
-      <div className="flex justify-between items-end mb-10">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 mb-8 sm:mb-10">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Discovery Search</h1>
-          <p className="text-secondary">Multi-Layer deterministic search for candidate-role fit.</p>
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-neutral-950">Discovery Search</h1>
+          <p className="text-sm text-neutral-600 font-normal mt-1">Multi-layer deterministic search for candidate-role fit.</p>
         </div>
       </div>
 
       {/* Input Control Panel */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-12">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-10 sm:mb-12">
         <div className="md:col-span-1">
           <Input label="Target Role" value={criteria.role} onChange={e => setCriteria({...criteria, role: e.target.value})} />
         </div>
@@ -78,8 +66,8 @@ export default function Discover() {
         <div className="md:col-span-1">
           <Input label="Target Firms (multiple)" placeholder="Comma separated" value={criteria.companies} onChange={e => setCriteria({...criteria, companies: e.target.value})} />
         </div>
-        <div className="md:col-span-1 flex items-center pt-2">
-          <Button onClick={runPhysicsEngine} isLoading={loading} className="w-full h-12">
+        <div className="md:col-span-1 flex items-end">
+          <Button onClick={runPhysicsEngine} isLoading={loading} className="w-full h-11 sm:h-12 shadow-sm">
             {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2 inline" /> : <Search className="w-4 h-4 mr-2 inline" />} 
             Search
           </Button>
@@ -89,62 +77,62 @@ export default function Discover() {
       {/* Results Mapping */}
       <div className="space-y-6">
         {results?.map((card, i) => (
-          <Card key={i} className="border-l-4 border-l-black group">
-            <div className="flex justify-between items-start mb-4">
+          <Card key={i} className="border-l-4 border-l-neutral-950 group">
+            <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-4">
               <div>
-                <h2 className="text-2xl font-semibold capitalize tracking-tight">{card.company_name}</h2>
-                <div className="flex gap-2 items-center mt-1">
-                   <span className="text-[10px] uppercase tracking-widest bg-gray-100 px-2 py-0.5 rounded font-bold text-gray-600">
+                <h2 className="text-xl sm:text-2xl font-bold capitalize tracking-tight text-neutral-950">{card.company_name}</h2>
+                <div className="flex flex-wrap gap-2 items-center mt-1.5">
+                   <span className="text-[10px] uppercase tracking-widest bg-neutral-100 px-2 py-0.5 rounded font-bold text-neutral-700">
                     {card.hiring_bar_difficulty} Bar
                   </span>
-                   <span className="text-[10px] uppercase tracking-widest text-secondary font-bold">
+                   <span className="text-[10px] uppercase tracking-widest text-neutral-500 font-bold">
                     {card.feasibility_timeline_weeks} Weeks to bridge
                   </span>
                 </div>
               </div>
-              <div className="text-right">
-                <div className="text-4xl font-bold tracking-tighter tabular-nums">{card.fit_score}%</div>
-                <div className="text-[10px] font-bold text-secondary uppercase tracking-widest">Fit Score</div>
+              <div className="text-left sm:text-right self-start">
+                <div className="text-3xl sm:text-4xl font-extrabold tracking-tighter tabular-nums text-neutral-950">{card.fit_score}%</div>
+                <div className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Fit Score</div>
               </div>
             </div>
             
-            <p className="text-lg font-medium mb-6 text-gray-800 leading-snug">"{card.verdict_headline}"</p>
+            <p className="text-base sm:text-lg font-medium mb-6 text-neutral-800 leading-snug">"{card.verdict_headline}"</p>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 sm:gap-8">
               {/* Reasoning Trace */}
-              <div className="bg-gray-50 p-5 rounded-2xl border border-gray-100">
-                <h3 className="text-[12px] font-bold uppercase text-secondary mb-3 flex items-center tracking-widest">
-                  <Zap className="w-3 h-3 mr-1.5 fill-black"/> Reasoning Trace
+              <div className="bg-neutral-50 p-5 rounded-2xl border border-neutral-100">
+                <h3 className="text-[11px] sm:text-[12px] font-bold uppercase text-neutral-500 mb-2.5 flex items-center tracking-widest">
+                  <Zap className="w-3 h-3 mr-1.5 fill-neutral-950"/> Reasoning Trace
                 </h3>
-                <p className="text-sm font-mono text-gray-600 leading-relaxed italic">{card.reasoning_trace}</p>
+                <p className="text-xs sm:text-sm font-mono text-neutral-700 leading-relaxed italic">{card.reasoning_trace}</p>
                 {/* main_advisory_text */}
-                <h3 className="text-[12px] font-bold uppercase text-secondary mb-3 mt-5 flex items-center tracking-widest">
-                  <Zap className="w-3 h-3 mr-1.5 fill-black"/> Advice
+                <h3 className="text-[11px] sm:text-[12px] font-bold uppercase text-neutral-500 mb-2.5 mt-5 flex items-center tracking-widest">
+                  <Zap className="w-3 h-3 mr-1.5 fill-neutral-950"/> Advice
                 </h3>
-                <p className="text-sm font-mono text-gray-600 italic">{card.main_advisory_text}</p>
+                <p className="text-xs sm:text-sm font-mono text-neutral-700 italic">{card.main_advisory_text}</p>
               </div>
               
               {/* Gap & Action Analysis */}
               <div>
-                <h3 className="text-[12px] font-bold uppercase text-secondary mb-3 mt-5 flex items-center tracking-widest">
+                <h3 className="text-[11px] sm:text-[12px] font-bold uppercase text-neutral-500 mb-2.5 flex items-center tracking-widest">
                   <AlertTriangle className="w-3 h-3 mr-1.5"/> Skill Gaps
                 </h3>
                 <div className="flex flex-wrap gap-1.5 mb-6">
                   {card.user_skill_gaps?.length > 0 ? card.user_skill_gaps.map(gap => (
-                    <span key={gap} className="px-2.5 py-1 bg-red-50 text-red-700 text-[11px] font-bold rounded-md border border-red-100 uppercase tracking-tight">
+                    <span key={gap} className="px-2.5 py-1 bg-rose-50 text-rose-700 text-[11px] font-bold rounded-md border border-rose-200 uppercase tracking-tight">
                       {gap}
                     </span>
-                  )) : <span className="text-green-600 text-sm font-medium">Paradigm alignment verified.</span>}
+                  )) : <span className="text-emerald-600 text-xs font-semibold">Paradigm alignment verified.</span>}
                 </div>
 
-                <h3 className="text-[12px] font-bold uppercase text-secondary mb-3 flex items-center tracking-widest">
+                <h3 className="text-[11px] sm:text-[12px] font-bold uppercase text-neutral-500 mb-2.5 flex items-center tracking-widest">
                   <CheckCircle className="w-3 h-3 mr-1.5"/> Execution Path
                 </h3>
-                <ul className="space-y-3">
+                <ul className="space-y-2.5">
                   {card.actionable_path?.map((step, idx) => (
-                    <li key={idx} className="text-sm text-gray-700 flex items-start leading-tight">
-                      <span className="mr-3 font-mono text-gray-300 font-bold">{idx+1}</span> 
-                      {step}
+                    <li key={idx} className="text-xs sm:text-sm text-neutral-800 flex items-start leading-snug">
+                      <span className="mr-2.5 font-mono text-neutral-400 font-bold shrink-0">{idx+1}.</span> 
+                      <span>{step}</span>
                     </li>
                   ))}
                 </ul>

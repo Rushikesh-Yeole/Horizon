@@ -1,6 +1,6 @@
 import os
 import logging
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Tuple
 
 from dotenv import load_dotenv
 from neo4j import AsyncGraphDatabase
@@ -28,6 +28,11 @@ async def setup():
         await s.run("CREATE CONSTRAINT IF NOT EXISTS FOR (s:Skill) REQUIRE s.name IS UNIQUE")
         await s.run("CREATE INDEX transitions_count IF NOT EXISTS FOR ()-[t:TRANSITIONS_TO]-() ON (t.count)")
     log.info("Graph constraints ready.")
+
+
+async def close():
+    if _driver is not None:
+        await _driver.close()
 
 
 async def evolve(role: str, skills: List[str]):
@@ -58,7 +63,7 @@ async def evolve(role: str, skills: List[str]):
         log.error(f"Graph evolve failed for '{role}': {e}")
 
 
-async def evolve_paths(paths: List[List[str]]):
+async def evolve_paths(paths: List[List[Tuple[str, float]]]):
     """
     Ingest real career progressions extracted from synthesis evidence.
     Creates Role nodes and weighted TRANSITIONS_TO edges for each consecutive pair.
@@ -71,11 +76,11 @@ async def evolve_paths(paths: List[List[str]]):
             """
             UNWIND $paths AS path
             UNWIND range(0, size(path) - 2) AS i
-            MERGE (r1:Role {name: toLower(path[i])})
-            MERGE (r2:Role {name: toLower(path[i + 1])})
+            MERGE (r1:Role {name: toLower(path[i][0])})
+            MERGE (r2:Role {name: toLower(path[i + 1][0])})
             MERGE (r1)-[t:TRANSITIONS_TO]->(r2)
-              ON CREATE SET t.count = 1
-              ON MATCH  SET t.count = t.count + 1
+              ON CREATE SET t.count = 1, t.years = path[i][1]
+              ON MATCH  SET t.count = t.count + 1, t.years = (COALESCE(t.years, 1.0) * 0.8) + (path[i][1] * 0.2)
             """,
             paths=paths,
         )

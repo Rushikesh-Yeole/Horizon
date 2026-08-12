@@ -26,7 +26,7 @@ export default function Login() {
         password
       });
 
-      login(res.data.access_token);
+      login(res.data.access_token, res.data.email);
       navigate('/');
 
     } catch (err) {
@@ -37,59 +37,63 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen bg-surface flex items-center justify-center px-6">
-      
-      <div className="w-full max-w-sm">
+    <div className="min-h-screen bg-white flex items-center justify-center px-4 sm:px-6 pt-20 pb-12">
+      <div className="w-full max-w-sm p-8 sm:p-10 rounded-3xl bg-neutral-50/60 border border-neutral-200/80 shadow-2xs">
         
         {/* Title */}
-        <h1 className="text-2xl font-semibold tracking-tight mb-8 text-center">
-          Welcome back
-        </h1>
+        <div className="text-center mb-8">
+          <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-neutral-950">
+            Welcome back
+          </h1>
+          <p className="text-xs sm:text-sm text-neutral-500 font-mono mt-1.5">Sign in to your Horizon account</p>
+        </div>
 
         {/* Error */}
         {error && (
-          <p className="text-sm text-red-500 mb-4 text-center">
+          <div className="text-xs font-mono font-medium text-rose-600 bg-rose-50 border border-rose-200 p-3 rounded-xl mb-5 text-center">
             {error}
-          </p>
+          </div>
         )}
 
         {/* Form */}
         <form onSubmit={handleLogin} className="flex flex-col gap-4">
-          
-          <input
-            type="email"
-            placeholder="Email"
-            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg 
-                       text-sm focus:outline-none focus:border-black transition"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-          />
+          <div>
+            <label className="block text-[10px] font-mono font-bold text-neutral-500 uppercase tracking-wider mb-1.5">Email</label>
+            <input
+              type="email"
+              placeholder="you@example.com"
+              className="w-full px-4 py-2.5 bg-white border border-neutral-200 rounded-xl text-xs sm:text-sm text-neutral-950 focus:outline-none focus:border-neutral-950 transition-all font-mono"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              required
+            />
+          </div>
 
-          <input
-            type="password"
-            placeholder="Password"
-            className="w-full px-4 py-3 bg-white border border-gray-200 rounded-lg 
-                       text-sm focus:outline-none focus:border-black transition"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-          />
+          <div>
+            <label className="block text-[10px] font-mono font-bold text-neutral-500 uppercase tracking-wider mb-1.5">Password</label>
+            <input
+              type="password"
+              placeholder="••••••••"
+              className="w-full px-4 py-2.5 bg-white border border-neutral-200 rounded-xl text-xs sm:text-sm text-neutral-950 focus:outline-none focus:border-neutral-950 transition-all"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              required
+            />
+          </div>
 
           <button
             type="submit"
             disabled={loading}
-            className="mt-2 bg-black text-white py-3 rounded-lg text-sm font-medium 
-                       hover:opacity-90 transition disabled:opacity-50"
+            className="mt-2 bg-neutral-950 text-white py-3 rounded-full text-xs sm:text-sm font-semibold hover:bg-neutral-800 transition-all disabled:opacity-50 shadow-sm"
           >
-            {loading ? "Logging in..." : "Login"}
+            {loading ? "Signing in..." : "Sign In &rarr;"}
           </button>
         </form>
 
         {/* Footer */}
-        <p className="text-xs text-gray-500 text-center mt-6">
+        <p className="text-xs font-mono text-neutral-500 text-center mt-6">
           Don’t have an account?{' '}
-          <Link to="/ingest" className="text-black font-medium hover:underline">
+          <Link to="/ingest" className="text-neutral-950 font-bold hover:underline">
             Initialize
           </Link>
         </p>

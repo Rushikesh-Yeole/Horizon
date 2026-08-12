@@ -1,93 +1,225 @@
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { ArrowRight, Compass, GitBranch, Layers } from 'lucide-react';
+import { ArrowRight, Compass, GitBranch, Layers, ShieldCheck, Cpu, Database, Network } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { Button } from '../components/UI';
 
 const FadeIn = ({ children, delay = 0 }) => (
   <motion.div
-    initial={{ opacity: 0, y: 20 }}
+    initial={{ opacity: 0, y: 14 }}
     animate={{ opacity: 1, y: 0 }}
-    transition={{ duration: 0.6, delay, ease: [0.22, 1, 0.36, 1] }}
+    transition={{ duration: 0.4, delay, ease: [0.16, 1, 0.3, 1] }}
   >
     {children}
   </motion.div>
 );
 
-const FeatureCard = ({ icon: Icon, title, desc, delay, to }) => (
+const FeatureCard = ({ icon: Icon, title, desc, delay, to, disabled, tag, highlights }) => (
   <FadeIn delay={delay}>
-    <Link to={to} className="group block h-full">
-      <div className="h-full p-8 rounded-3xl bg-white border border-gray-100 shadow-sm hover:shadow-xl hover:scale-[1.02] transition-all duration-300 cursor-pointer relative overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-gray-50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-        <div className="relative z-10">
-          <div className="w-12 h-12 rounded-2xl bg-gray-50 flex items-center justify-center mb-6 text-black group-hover:bg-black group-hover:text-white transition-colors">
+    {disabled ? (
+      <div className="h-full p-7 sm:p-8 rounded-2xl bg-neutral-50/60 border border-neutral-200/80 opacity-60 cursor-not-allowed relative">
+        <div className="flex items-center justify-between mb-6">
+          <div className="w-12 h-12 rounded-xl bg-neutral-200/60 flex items-center justify-center text-neutral-700">
             <Icon size={24} />
           </div>
-          <h3 className="text-xl font-semibold mb-3">{title}</h3>
-          <p className="text-gray-500 text-sm leading-relaxed">{desc}</p>
+          <span className="text-xs font-semibold tracking-wider uppercase px-3 py-1 bg-neutral-200/70 text-neutral-700 rounded-md">
+            Demo Mode Locked
+          </span>
         </div>
+        <h3 className="text-xl font-bold text-neutral-950 mb-3">{title}</h3>
+        <p className="text-neutral-600 text-base leading-relaxed">{desc}</p>
       </div>
-    </Link>
+    ) : (
+      <Link to={to} className="group block h-full">
+        <div className="h-full p-7 sm:p-8 rounded-2xl bg-white border border-neutral-200/90 hover:border-neutral-950 hover:shadow-sm transition-all duration-200 flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between mb-6">
+              <div className="w-12 h-12 rounded-xl bg-neutral-100 flex items-center justify-center text-neutral-950 group-hover:bg-neutral-950 group-hover:text-white transition-colors">
+                <Icon size={24} />
+              </div>
+              {tag && (
+                <span className="text-xs font-bold tracking-wider uppercase px-3 py-1 bg-neutral-100 text-neutral-800 rounded-md">
+                  {tag}
+                </span>
+              )}
+            </div>
+            <h3 className="text-xl sm:text-2xl font-bold text-neutral-950 mb-3 group-hover:text-neutral-950 transition-colors">
+              {title}
+            </h3>
+            <p className="text-neutral-700 text-base leading-relaxed mb-6">{desc}</p>
+            
+            {highlights && highlights.length > 0 && (
+              <ul className="space-y-2 mb-6 border-t border-neutral-100 pt-4">
+                {highlights.map((h, idx) => (
+                  <li key={idx} className="flex items-center text-xs sm:text-sm text-neutral-600 font-medium">
+                    <span className="w-1.5 h-1.5 rounded-full bg-neutral-900 mr-2.5" />
+                    {h}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <div className="inline-flex items-center text-sm font-bold text-neutral-950 group-hover:translate-x-1 transition-transform pt-2">
+            <span>Explore pipeline</span>
+            <ArrowRight size={16} className="ml-2" />
+          </div>
+        </div>
+      </Link>
+    )}
   </FadeIn>
 );
 
 export default function Home() {
+  const { email, isAuthenticated } = useAuth();
+  const isDemo = email === 'demo@horizon.com';
+
   return (
-    <div className="min-h-screen pt-32 pb-20 px-6 max-w-7xl mx-auto">
+    <div className="min-h-screen pt-24 sm:pt-28 pb-16 px-4 sm:px-6 max-w-6xl mx-auto">
       {/* Hero Section */}
-      <div className="max-w-3xl mx-auto text-center mb-24">
-        {/* <FadeIn delay={0.1}>
-          <span className="inline-block py-1 px-3 rounded-full bg-gray-100 text-gray-600 text-xs font-semibold tracking-wide uppercase mb-6">
-            v1.0 Public Beta
-          </span>
-        </FadeIn> */}
-        <FadeIn delay={0.2}>
-          <h1 className="text-5xl md:text-7xl font-bold tracking-tight text-gray-900 mb-8 leading-[1.1]">
-            Your Career horizon <br />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-gray-400 to-gray-200">
-              solved.
-            </span>
+      <div className="max-w-4xl mx-auto text-center mb-16">
+        <FadeIn delay={0.05}>
+          <div className="inline-flex items-center gap-2.5 px-3.5 sm:px-4 py-1.5 rounded-full border border-neutral-300 bg-neutral-50/90 text-neutral-900 text-xs sm:text-sm font-semibold mb-6 sm:mb-8 shadow-2xs max-w-full">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+            <span className="truncate">Living Neo4j Career Graph • Gemini 2.5 Synthesis</span>
+          </div>
+        </FadeIn>
+        
+        <FadeIn delay={0.1}>
+          <h1 className="text-3xl xs:text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight text-neutral-950 mb-6 leading-[1.08]">
+            Career intelligence,<br />
+            grounded in market reality.
           </h1>
         </FadeIn>
-        <FadeIn delay={0.3}>
-          <p className="text-xl text-gray-500 max-w-xl mx-auto leading-relaxed">
-            Not a job board.
-            <br/>
-            A deterministic intelligence engine that calculates the semantic friction between you and your future.
-            <br/><br/>
-            <b>The Career Intelligence Platform</b>
+        
+        <FadeIn delay={0.15}>
+          <p className="text-base sm:text-2xl text-neutral-700 max-w-3xl mx-auto font-normal leading-relaxed mb-8 sm:mb-10">
+            Horizon couples a living Neo4j graph with 14x parallel web scrapers to triangulate verified career trajectories, live hiring bars, and skill gap roadmaps.
           </p>
+        </FadeIn>
+
+        <FadeIn delay={0.2}>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-center gap-3 sm:gap-4 max-w-md sm:max-w-none mx-auto">
+            <Link to={isAuthenticated ? "/discover" : "/ingest"} className="w-full sm:w-auto">
+              <Button variant="primary" className="w-full sm:w-auto px-7 py-3.5 text-sm sm:text-base shadow-sm">
+                Get Started
+                <ArrowRight size={18} className="ml-2" />
+              </Button>
+            </Link>
+            <Link to="/tree" className="w-full sm:w-auto">
+              <Button variant="outline" className="w-full sm:w-auto px-7 py-3.5 text-sm sm:text-base">
+                View Career Tree
+              </Button>
+            </Link>
+          </div>
         </FadeIn>
       </div>
 
-      {/* The Modules Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 px-4">
+      {/* Live System Architecture Metric Strip */}
+      <FadeIn delay={0.22}>
+        <div className="bg-neutral-950 text-white rounded-2xl p-5 sm:p-8 mb-16 shadow-md grid grid-cols-2 md:grid-cols-4 gap-4 sm:gap-6 text-center border border-neutral-900">
+          <div className="border-r border-neutral-800/80 pr-2 sm:pr-4">
+            <div className="text-xl sm:text-4xl font-extrabold text-white mb-1">15-Hop</div>
+            <div className="text-[11px] sm:text-sm text-neutral-400 font-medium">Neo4j Traversal</div>
+          </div>
+          <div className="md:border-r border-neutral-800/80 pr-2 sm:pr-4">
+            <div className="text-xl sm:text-4xl font-extrabold text-white mb-1">14x</div>
+            <div className="text-[11px] sm:text-sm text-neutral-400 font-medium">Parallel Streams</div>
+          </div>
+          <div className="border-r border-neutral-800/80 pr-2 sm:pr-4">
+            <div className="text-xl sm:text-4xl font-extrabold text-white mb-1">0%</div>
+            <div className="text-[11px] sm:text-sm text-neutral-400 font-medium">Hallucination</div>
+          </div>
+          <div>
+            <div className="text-xl sm:text-4xl font-extrabold text-white mb-1">24h</div>
+            <div className="text-[11px] sm:text-sm text-neutral-400 font-medium">Redis Caching</div>
+          </div>
+        </div>
+      </FadeIn>
+
+      {/* Modules Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
         <FeatureCard 
           to="/ingest"
-          delay={0.4}
+          delay={0.25}
           icon={Layers}
           title="Profile Ingestion"
-          desc="Feed the graph. We deconstruct your skills & experience into vector embeddings to understand your true velocity."
+          desc="PyMuPDF ingests your resume into Markdown, then Gemini 2.5 Flash extracts canonical skills, education, and projects into structured Pydantic schemas."
+          disabled={isDemo}
+          tag="Pipeline 01"
+          highlights={[
+            "PDF to Markdown extraction",
+            "Synonym skill normalizer",
+            "Motor async MongoDB storage"
+          ]}
         />
         <FeatureCard 
           to="/discover"
-          delay={0.5}
+          delay={0.3}
           icon={Compass}
           title="Discovery Engine"
-          desc="Agentic swarms perform real-time, deep audits of global roles to quantify alignment and stress-test your profile against live market hiring bars."
+          desc="Scrapes active Greenhouse & Lever JDs in parallel, scoring your profile against target company bars using strict algorithmic rubrics."
+          tag="Pipeline 02"
+          highlights={[
+            "Live Greenhouse/Lever JDs",
+            "A/B/C/D scoring rubric",
+            "Top 10 absent skill gaps"
+          ]}
         />
         <FeatureCard 
           to="/tree"
-          delay={0.6}
+          delay={0.35}
           icon={GitBranch}
-          title="Serendipitous Trajectory Tree"
-          desc="Reverse-engineered career roadmaps that triangulate 42+ high-signal experiences to quantify and map your most ambitious professional outcomes."
+          title="Trajectory Tree"
+          desc="Graph-first trajectory discovery synthesizing real Reddit, Blind, and Tech Blog career stories into a 5-path evidence-cited roadmap."
+          tag="Pipeline 03"
+          highlights={[
+            "Neo4j trajectory priors",
+            "Real URL source citations",
+            "Self-improving graph writeback"
+          ]}
         />
       </div>
 
+      {/* Grounded System Engineering Statement */}
+      <FadeIn delay={0.4}>
+        <div className="border-t border-neutral-200/90 pt-12 grid grid-cols-1 md:grid-cols-3 gap-8 text-left">
+          <div className="p-6 rounded-xl bg-neutral-50/70 border border-neutral-200/80">
+            <div className="flex items-center gap-2 mb-3 text-neutral-950 font-bold text-base">
+              <Database size={18} />
+              <span>01 / Graph Before LLM</span>
+            </div>
+            <p className="text-sm text-neutral-700 leading-relaxed">
+              Neo4j queries find weighted skill overlaps (`REQUIRES` edges) and walk historical transitions (`TRANSITIONS_TO`) up to 15 hops before falling back to Gemini synthesis.
+            </p>
+          </div>
+
+          <div className="p-6 rounded-xl bg-neutral-50/70 border border-neutral-200/80">
+            <div className="flex items-center gap-2 mb-3 text-neutral-950 font-bold text-base">
+              <ShieldCheck size={18} />
+              <span>02 / Evidence Over Inference</span>
+            </div>
+            <p className="text-sm text-neutral-700 leading-relaxed">
+              Tavily pulls up to 14 high-signal results per archetype from Blind, HackerNews, and Engineering Blogs. Every generated stage cites exact source URLs.
+            </p>
+          </div>
+
+          <div className="p-6 rounded-xl bg-neutral-50/70 border border-neutral-200/80">
+            <div className="flex items-center gap-2 mb-3 text-neutral-950 font-bold text-base">
+              <Network size={18} />
+              <span>03 / Self-Improving Flywheel</span>
+            </div>
+            <p className="text-sm text-neutral-700 leading-relaxed">
+              Extracted career paths (`observed_paths`) write back to Neo4j on every synthesis run. More users → denser graph → sharper career trajectories.
+            </p>
+          </div>
+        </div>
+      </FadeIn>
+
       {/* Footer */}
-      <FadeIn delay={0.8}>
-        <div className="mt-32 text-center border-t border-gray-100 pt-10">
-          <p className="text-gray-400 text-sm">
-            <span className="font-mono text-xs opacity-50 mt-2 block">Rushikesh Yele | Shashwat Awate</span>
+      <FadeIn delay={0.45}>
+        <div className="mt-14 text-center border-t border-neutral-200/90 pt-6">
+          <p className="text-neutral-500 text-xs font-semibold tracking-wide">
+            Horizon Infrastructure for Career Intelligence • Built by Rushikesh Yeole & Shashwat Awate
           </p>
         </div>
       </FadeIn>

@@ -18,6 +18,7 @@ class Profile(BaseModel):
     phone: Optional[str] = None
     linkedin_link: Optional[str] = None
     github_link: Optional[str] = None
+    avatar_url: Optional[str] = None
     preferences: Optional[dict] = None
     skills: Optional[List[str]] = None
     education: Optional[List[Education]] = None
@@ -41,6 +42,7 @@ class User(BaseModel):
     id: str
     email: str
     password: str
+    avatar_url: Optional[str] = None
     profile: Profile = Profile()
     personality: Personality = Personality()
 

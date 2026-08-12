@@ -3,24 +3,24 @@ import json
 import logging
 import asyncio
 import hashlib
+import re
 from typing import List, Dict, Any, Literal, Tuple
 
 import redis as sync_redis
 from dotenv import load_dotenv
-from google import genai
-from google.genai import types
+from openai import AsyncOpenAI
 from pydantic import BaseModel, Field
 
 import neo_graph as graph
-from ops import log_gemini_cost
+from ops import log_llm_cost
 
 load_dotenv()
 log = logging.getLogger("advisor")
 logging.getLogger("google_genai.models").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
-_client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-MODEL = "gemini-2.5-flash-lite"
+_client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
+MODEL = os.getenv("OPENROUTER_MODEL", "google/gemini-2.5-flash")
 JD_TTL = 30 * 60
 
 SYSTEM = (
@@ -28,16 +28,7 @@ SYSTEM = (
     "Measure capability gap and proven velocity. Dense output only."
 )
 
-_sync_redis_client = None
 
-
-def _get_sync_redis():
-    global _sync_redis_client
-    if _sync_redis_client is None:
-        url = os.getenv("REDIS_URL")
-        if url:
-            _sync_redis_client = sync_redis.from_url(url, decode_responses=True)
-    return _sync_redis_client
 
 
 class AdvisoryCard(BaseModel):
@@ -53,18 +44,39 @@ class AdvisoryCard(BaseModel):
     main_advisory_text: str = Field(..., description="Max 25 words. What actually moves the needle.")
 
 
+async def _spell_check(role: str, company: str, location: str) -> Dict[str, str]:
+    prompt = f"Spell check and normalize: role, company, location. Return JSON: {{'role': '{role}', 'company': '{company}', 'location': '{location}'}}"
+    try:
+        resp = await _client.chat.completions.create(
+            model=MODEL,
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+            temperature=0.0
+        )
+        log_llm_cost("spell_check", MODEL, resp)
+        if resp.choices[0].message.content:
+            parsed = json.loads(resp.choices[0].message.content)
+            if isinstance(parsed, list) and len(parsed) > 0:
+                parsed = parsed[0]
+            if isinstance(parsed, dict):
+                return parsed
+    except Exception as e:
+        log.warning(f"Spell check failed: {e}")
+    return {"role": role, "company": company, "location": location}
+
+
 def _jd_cache_key(role: str, company: str, location: str) -> str:
-    h = hashlib.md5(f"{role.lower()}|{company.lower()}|{location.lower()}".encode()).hexdigest()
-    return f"horizon:jd:{h}"
+    def clean(s: str) -> str:
+        return re.sub(r'[^a-z0-9]+', '-', s.lower()).strip('-')
+    return f"horizon:jd:{clean(company)}:{clean(role)}:{clean(location)}"
 
 
-def _fetch_jd(role: str, company: str, location: str) -> Tuple[str, List[str], bool]:
-    """Fetch JD via Gemini + Google Search. Returns (jd_text, skills, from_cache)."""
-    rc = _get_sync_redis()
+async def _fetch_jd(rc, role: str, company: str, location: str) -> Tuple[str, List[str], bool]:
+    """Fetch JD via Gemini + Tavily Search. Returns (jd_text, skills, from_cache)."""
     key = _jd_cache_key(role, company, location)
 
     if rc:
-        cached = rc.get(key)
+        cached = await rc.get(key)
         if cached:
             log.info(f"JD cache hit: {company}")
             try:
@@ -83,34 +95,36 @@ def _fetch_jd(role: str, company: str, location: str) -> Tuple[str, List[str], b
     skills: List[str] = []
 
     try:
-        resp = _client.models.generate_content(
+        resp = await _client.chat.completions.create(
             model=MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                tools=[types.Tool(google_search=types.GoogleSearch())],
-                temperature=0.0,
-            ),
+            messages=[{"role": "user", "content": prompt}],
+            temperature=0.0,
+            response_format={"type": "json_object"},
+            extra_body={
+                "plugins": [{"id": "web"}]
+            }
         )
-        log_gemini_cost("fetch_jd", MODEL, resp)
-        if resp.text:
-            jd_text = resp.text.replace("```json", "").replace("```", "").strip()
+        log_llm_cost("fetch_jd", MODEL, resp)
+        if resp and getattr(resp, "choices", None) and len(resp.choices) > 0 and resp.choices[0].message.content:
+            jd_text = resp.choices[0].message.content.strip()
             skills = json.loads(jd_text).get("skills", [])
             if rc:
-                rc.setex(key, JD_TTL, jd_text)
+                await rc.setex(key, JD_TTL, jd_text)
     except Exception as e:
         log.warning(f"JD fetch failed [{company}]: {e}")
 
     return jd_text, skills, False
 
 
-def _build_card(
+async def _build_card(
+    rc,
     user_profile: Dict[str, Any],
     company: str,
     role: str,
     location: str,
     signals: str,
 ) -> Tuple[Dict[str, Any], str, List[str]]:
-    jd_text, jd_skills, from_cache = _fetch_jd(role, company, location)
+    jd_text, jd_skills, from_cache = await _fetch_jd(rc, role, company, location)
     fresh_skills = [] if from_cache else jd_skills
 
     p = user_profile.get("profile", {})
@@ -149,25 +163,32 @@ Actionable path: name actual technologies, platforms, or specific project types 
 Advisory: what single thing most changes this person's odds at this company right now."""
 
     try:
-        resp = _client.models.generate_content(
+        resp = await _client.chat.completions.create(
             model=MODEL,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                system_instruction=SYSTEM,
-                response_mime_type="application/json",
-                response_schema=AdvisoryCard,
-                temperature=0.0,
-                seed=42,
-            ),
+            messages=[
+                {"role": "system", "content": SYSTEM},
+                {"role": "user", "content": prompt}
+            ],
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "AdvisoryCard",
+                    "strict": True,
+                    "schema": AdvisoryCard.model_json_schema()
+                }
+            },
+            temperature=0.0,
+            seed=42,
         )
-        log_gemini_cost("build_card", MODEL, resp)
-        return resp.parsed.model_dump(), role, fresh_skills
+        log_llm_cost("build_card", MODEL, resp)
+        return json.loads(resp.choices[0].message.content), role, fresh_skills
     except Exception as e:
         log.error(f"Card failed [{company}]: {e}")
-        return {"company_name": company, "fit_score": 0, "verdict_headline": "Analysis failed.", "error": str(e)}, role, []
+        return {"company_name": company, "fit_score": 0, "verdict_headline": "Analysis failed.", "error": str(e), "reasoning_trace": "", "hiring_bar_difficulty": "Standard", "core_pillars_required": [], "user_skill_gaps": [], "feasibility_timeline_weeks": 0, "actionable_path": [], "main_advisory_text": ""}, role, []
 
 
 async def generate_cards(
+    rc,
     user_profile: Dict[str, Any],
     market_data: Dict[str, Any],
 ) -> List[Dict[str, Any]]:
@@ -182,6 +203,11 @@ async def generate_cards(
         for c in raw_intel
     })[:3]
 
+    clean_data = await asyncio.gather(*[_spell_check(role, c, location) for c in companies])
+    if clean_data:
+        role = clean_data[0].get("role", role)
+        location = clean_data[0].get("location", location)
+
     def get_signals(company: str) -> str:
         for item in raw_intel:
             name = item["company_name"] if isinstance(item, dict) else item.company_name
@@ -193,10 +219,12 @@ async def generate_cards(
                 )
         return ""
 
-    results: List[Tuple[Dict, str, List[str]]] = await asyncio.gather(*[
-        asyncio.to_thread(_build_card, user_profile, c, role, location, get_signals(c))
-        for c in companies
-    ])
+    tasks = []
+    for i, original_c in enumerate(companies):
+        clean_c = clean_data[i].get("company", original_c) if clean_data else original_c
+        tasks.append(_build_card(rc, user_profile, clean_c, role, location, get_signals(original_c)))
+
+    results: List[Tuple[Dict, str, List[str]]] = await asyncio.gather(*tasks) if tasks else []
 
     cards = [r[0] for r in results]
     evolutions = [(r[1], r[2]) for r in results if r[2]]
