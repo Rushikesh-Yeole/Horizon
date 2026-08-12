@@ -24,11 +24,13 @@ load_dotenv()
 
 from onboarding.mbti_questionnare import prepare_questions, evaluate_answers
 from onboarding.user import insert_user_to_db, get_user_by_email
-from onboarding.models import RegisterReq, Answers, User, LoginReq
+from onboarding.models import RegisterReq, Answers, User, LoginReq, SendOtpReq
 from onboarding.resume import resume_router
 
 import ops
 import neo_graph as graph
+import mailer
+from scoring import profile_hash as _profile_hash
 from discover import generate_cards
 from tree import generate_tree
 
@@ -58,9 +60,13 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="Horizon Intelligence Platform", version="2.0.0", lifespan=lifespan)
 
 prod_origin = os.getenv("PROD_FRONTEND_URL")
-origins = ["http://localhost:5173", "http://127.0.0.1:5173"]
+origins = [
+    "http://localhost:5173", 
+    "http://127.0.0.1:5173",
+    "https://horizon-six-beryl.vercel.app"
+]
 if prod_origin:
-    origins.append(prod_origin)
+    origins.append(prod_origin.rstrip("/"))
 
 app.add_middleware(
     CORSMiddleware,
@@ -140,11 +146,45 @@ app.include_router(resume_router, prefix="/auth")
 
 # ── Auth ──────────────────────────────────────────────────────────────────────
 
+@app.post("/auth/send-otp")
+async def send_otp_endpoint(req: SendOtpReq, rc: aioredis.Redis = Depends(get_redis)):
+    try:
+        if get_user_by_email(req.email):
+            return JSONResponse({"msg": "User already exists."}, status_code=400)
+        
+        # Generate 6 digit OTP
+        otp_code = str(random.randint(100000, 999999))
+        
+        # Store in Redis, expire in 5 minutes
+        if rc:
+            await rc.setex(f"otp:{req.email}", 300, otp_code)
+        
+        # Send via email
+        asyncio.create_task(mailer.send_otp(req.email, otp_code))
+        
+        return JSONResponse({"msg": "OTP sent successfully."})
+    except Exception as e:
+        log.error(f"Send OTP failed: {e}")
+        return JSONResponse({"err": "Failed to send OTP."}, status_code=500)
+
+
 @app.post("/auth/register")
-async def register(user: RegisterReq):
+async def register(user: RegisterReq, rc: aioredis.Redis = Depends(get_redis)):
     try:
         if get_user_by_email(user.email):
             return JSONResponse({"msg": "User already exists."}, status_code=400)
+            
+        # Verify OTP
+        if not rc:
+            return JSONResponse({"msg": "Redis unavailable for OTP check."}, status_code=500)
+            
+        stored_otp = await rc.get(f"otp:{user.email}")
+        if not stored_otp or stored_otp != user.otp:
+            return JSONResponse({"msg": "Invalid or expired OTP."}, status_code=400)
+            
+        # OTP is valid, remove it
+        await rc.delete(f"otp:{user.email}")
+        
         user_id = str(uuid.uuid4())
         hashed = bcrypt.hashpw(user.password.encode(), bcrypt.gensalt()).decode()
         avatar_idx = random.randint(1, 30)
@@ -158,6 +198,8 @@ async def register(user: RegisterReq):
         )
         insert_user_to_db(final_user)
         token_data = await ops.issue_token(user_id)
+        name = (user.profile.name if user.profile and hasattr(user.profile, 'name') and user.profile.name else user.email)
+        asyncio.create_task(mailer.send_welcome(user.email, name))
         return JSONResponse({"user_id": user_id, "access_token": token_data["access_token"]})
     except Exception as e:
         log.error(f"Register failed: {e}")
@@ -167,10 +209,12 @@ async def register(user: RegisterReq):
 @app.post("/auth/login")
 async def login(user: LoginReq):
     try:
-        user_data = get_user_by_email(user.email)
-        if not user_data:
-            raise HTTPException(404, "User not found.")
+        user_data = await ops.users_col.find_one({"email": user.email})
+        if not user_data or not bcrypt.checkpw(user.password.encode(), user_data["password"].encode()):
+            raise HTTPException(401, "Invalid credentials.")
         token_data = await ops.issue_token(user_data["id"])
+        if user_data["email"] != "demo@horizon.com":
+            asyncio.create_task(mailer.send_login_alert(user_data["email"]))
         return JSONResponse({"user_id": user_data["id"], "access_token": token_data["access_token"], "email": user_data["email"]})
     except HTTPException:
         raise
@@ -196,14 +240,50 @@ async def get_me(user_id: str = Depends(get_current_user)):
         log.error(f"Failed to get user: {e}")
         raise HTTPException(500, "Internal server error.")
 
+
+@app.delete("/users/me")
+async def delete_account(
+    rc: aioredis.Redis = Depends(get_redis),
+    user_id: str = Depends(get_current_user),
+):
+    """Permanently delete user account and flush all their cache keys."""
+    result = await ops.users_col.delete_one({"id": user_id})
+    if result.deleted_count == 0:
+        raise HTTPException(404, "User not found.")
+    # Flush all Redis keys scoped to this user
+    if rc:
+        cursor = 0
+        while True:
+            cursor, keys = await rc.scan(cursor, match=f"horizon:*:{user_id}:*", count=100)
+            if keys:
+                await rc.delete(*keys)
+            if cursor == 0:
+                break
+    log.info(f"Account deleted: {user_id}")
+    return JSONResponse({"msg": "Account deleted."})
+
+
+from onboarding.resume import _validate_upload
+
+@app.post("/upload/resume")
+async def upload_resume(
+    file: UploadFile = File(...),
+    user_id: str = Depends(get_current_user),
+):
+    """Authenticated resume upload with PDF type + 5MB size enforcement."""
+    await _validate_upload(file)
+    return JSONResponse({"msg": "Upload accepted.", "filename": file.filename})
+
+
 from onboarding.models import Profile
 
 @app.put("/users/me/profile")
 async def update_profile(profile: Profile, user_id: str = Depends(get_current_user)):
     try:
+        profile_data = profile.model_dump()
         res = await ops.users_col.update_one(
             {"id": user_id},
-            {"$set": {"profile": profile.model_dump()}}
+            {"$set": {"profile": profile_data, "profile_hash": _profile_hash(profile_data)}}
         )
         if res.matched_count == 0:
             raise HTTPException(404, "User not found.")
@@ -223,10 +303,25 @@ async def get_personality_questions():
         return JSONResponse({"err": str(e)}, status_code=500)
 
 
-@app.post("/users/me/personality")
-async def process_personality(user_answers: Answers):
+@app.post("/personality/evaluate")
+async def evaluate_personality_endpoint(user_answers: Answers):
     try:
         scores, persona = evaluate_answers(user_answers=user_answers.answers)
+        return JSONResponse({"msg": "Done.", "scores": scores, "persona": persona})
+    except Exception as e:
+        log.error(f"Personality evaluation failed: {e}")
+        return JSONResponse({"err": str(e)}, status_code=500)
+
+
+@app.post("/users/me/personality")
+async def process_personality(user_answers: Answers, user_id: str = Depends(get_current_user)):
+    try:
+        scores, persona = evaluate_answers(user_answers=user_answers.answers)
+        # Persist as optional self-reported preference — never used for scoring
+        await ops.users_col.update_one(
+            {"id": user_id},
+            {"$set": {"personality_preferences": {"scores": scores, "persona": persona}}}
+        )
         return JSONResponse({"msg": "Done.", "scores": scores, "persona": persona})
     except Exception as e:
         log.error(f"Personality failed: {e}")
@@ -259,8 +354,10 @@ class MarketPacket(BaseModel):
 
 
 def _intel_cache_key(role: str, company: str, location: str) -> str:
-    h = hashlib.md5(f"{role.lower()}|{company.lower()}|{location.lower()}".encode()).hexdigest()
-    return f"horizon:intel:{h}"
+    import re
+    def clean(s: str) -> str:
+        return re.sub(r'[^a-z0-9]+', '-', s.lower()).strip('-')
+    return f"horizon:intel:{clean(company)}:{clean(role)}:{clean(location)}"
 
 
 async def _fetch_company_intel(role: str, company: str, location: str) -> CompanyIntel:
@@ -332,16 +429,25 @@ class DiscoverRequest(BaseModel):
 async def discover_search(
     request: DiscoverRequest, 
     rc: aioredis.Redis = Depends(get_redis),
-    user_id: str = Depends(get_current_user)
+    user_id: str = Depends(get_current_user),
+    force_refresh: bool = False,
 ):
+    import time
+    start_time = time.time()
+    
     user_doc = await ops.users_col.find_one({"id": user_id})
     if not user_doc:
         raise HTTPException(404, "User not found.")
     user_doc.pop("_id", None)
     
-    market = await _get_market_intel(request.search_criteria, rc)
-    cards = await generate_cards(rc, user_doc, market.model_dump())
-    return {"guidance_cards": cards}
+    cards = await generate_cards(rc, user_doc, request.search_criteria.model_dump(), force_refresh=force_refresh)
+    
+    from scoring import profile_hash as _ph
+    run_id = _ph({"user": user_id, "criteria": request.search_criteria.model_dump()})
+    latency_ms = (time.time() - start_time) * 1000
+    log.info(f"[/discover/search] Completed in {latency_ms:.2f}ms run_id={run_id}")
+    
+    return {"guidance_cards": cards, "latency_ms": latency_ms, "run_id": run_id}
 
 
 # Career Tree
@@ -349,8 +455,11 @@ async def discover_search(
 @app.get("/career/tree")
 async def get_career_tree(
     rc: aioredis.Redis = Depends(get_redis),
-    user_id: str = "9f3c7a21-6d44-4a9f-8f1e-2b6c9d3e7a55",
+    user_id: str = Depends(get_current_user),
 ):
+    import time
+    start_time = time.time()
+    
     user_doc = await ops.users_col.find_one({"id": user_id})
     if not user_doc:
         raise HTTPException(404, "User not found.")
@@ -359,6 +468,11 @@ async def get_career_tree(
     result = await generate_tree(user_id, user_doc, rc)
     if result.get("status") == "error":
         raise HTTPException(500, result.get("message"))
+        
+    latency_ms = (time.time() - start_time) * 1000
+    result["latency_ms"] = latency_ms
+    log.info(f"[/career/tree] Completed in {latency_ms:.2f}ms")
+    
     return result
 
 

@@ -80,10 +80,9 @@ export default function NavBar() {
   return (
     <>
       <nav className="fixed top-0 w-full z-50 bg-white/75 backdrop-blur-xl border-b border-neutral-200/70 shadow-2xs transition-all">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-2">
-          <Link to="/" className="font-extrabold tracking-tight text-lg sm:text-xl text-neutral-950 flex items-center gap-1.5 sm:gap-2 shrink-0">
-            <span>Horizon</span>
-            <span className="w-1.5 h-1.5 rounded-full bg-neutral-950" />
+        <div className="max-w-[1680px] w-full mx-auto px-4 sm:px-8 lg:px-12 xl:px-16 h-16 flex items-center justify-between gap-2">
+          <Link to="/" className="font-extrabold tracking-tight text-lg sm:text-xl text-neutral-950 shrink-0">
+            Horizon
           </Link>
           
           <div className="flex items-center gap-2 sm:gap-5 shrink-0">

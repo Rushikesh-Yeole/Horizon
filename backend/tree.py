@@ -242,7 +242,9 @@ def _resolve_citations(tree: Dict[str, Any], url_map: Dict[str, str]) -> int:
                     resolved.append(url_map[clean])
                     count += 1
                 elif ref.startswith("http"):
+                    # Only allow bare URLs that are genuine links, not SOURCE_REF tags
                     resolved.append(ref)
+                # SOURCE_REF_X with no mapping is silently dropped
             stage["citations"] = resolved
     return count
 

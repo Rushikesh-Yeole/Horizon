@@ -3,7 +3,7 @@ from pymongo import MongoClient
 
 from typing import Dict,List
 
-import pandas as pd
+
 import numpy as np
 import random
 

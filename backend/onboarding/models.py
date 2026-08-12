@@ -31,9 +31,14 @@ class Personality(BaseModel):
     type: Optional[str] = None
 
 
+class SendOtpReq(BaseModel):
+    email: str
+
+
 class RegisterReq(BaseModel):
     email: str
     password: str
+    otp: str
     profile: Profile
     personality: Personality = Personality()
 

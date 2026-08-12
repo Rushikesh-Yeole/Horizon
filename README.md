@@ -1,248 +1,161 @@
 # Horizon
 
-**Career intelligence Platform. Not a job board. Not a chatbot.**
+**Career intelligence platform. Not a job board. Not a chatbot.**
 
-Horizon builds a personalized, evidence-grounded career roadmap for every user, grounded in real job descriptions, real interview signals, and a self-improving knowledge graph that gets sharper with every request. It combines a living Neo4j career graph, parallel LLM synthesis over real web evidence, and a company-fit scoring engine into a single async platform.
+**[Live demo](https://horizon-six-beryl.vercel.app/)**
 
-Going live as a beta soon.
-
----
-
-## The Core Problem
-
-Career guidance is either too generic (LinkedIn Learning paths) or too expensive (career coaches). Neither is grounded in live market reality. Most AI career tools hallucinate paths, ignore the actual hiring bar, and give zero citations for their advice.
-
-Horizon is built differently: every career path it generates is triangulated from real sources, every company fit score is computed against a live JD signal, and the system's knowledge compounds across users through a shared graph.
+Horizon builds career roadmaps grounded in real job descriptions, real interview signals, and a graph that gets sharper with every request. The system's prior knowledge compounds across users & each run makes the next one better.
 
 ---
 
-## How It Works
+## Why
 
-### Onboarding Pipeline
+Career advice is generic or expensive, and neither reflects what's actually being hired for right now. Most AI career tools ignore the real hiring bar and cite nothing.
 
-**Resume Parsing:** PDF ingested via PyMuPDF, converted to Markdown, then parsed by Gemini 2.5 Flash into a structured schema (education, skills, projects). Skills are immediately passed through a normalizer to canonicalize synonyms (`"ReactJS"` → `"React"`, `"Postgres"` → `"PostgreSQL"`).
-
-**MBTI Personality Assessment:** A lightweight, database-backed questionnaire system. Questions are randomly sampled per MBTI dimension from MongoDB, presented to the user, and scored via normalized Likert scaling. The resulting personality type is stored on the user profile and used to weight path preferences.
-
-User profiles are stored in MongoDB with full async access via Motor.
+Horizon works differently: real evidence (live JDs, Blind posts, engineering blogs) constrains the LLM rather than replacing it, and what gets learned gets persisted into a graph that future requests query first.
 
 ---
 
-### Career Tree Generation (`tree.py`)
+## Career Tree (`tree.py`)
 
-The flagship feature. Given a user's skill stack and preferences, Horizon builds a 5-path career roadmap with 4+ concrete stages each, every claim sourced from real web evidence.
-
-**Pipeline:**
+The flagship. Builds a 5-path career roadmap, 4+ stages each, every claim sourced from real web evidence.
 
 ```
-Skills → Graph Traversal → Tavily Evidence Fetch → Gemini Synthesis → Citation Resolution → Graph Learning
+Skills -> Neo4j Traversal -> Parallel Evidence Fetch -> Gemini Synthesis -> Citation Resolution -> Graph Evolution
 ```
 
-**Step 1: Graph-first archetype discovery**
+**Graph-first.** Before any LLM call, Horizon queries Neo4j for validated trajectories. It finds roles by weighted skill overlap (`REQUIRES` edges), then walks `TRANSITIONS_TO` edges up to 15 hops to a terminal role. LLM is the cold-start fallback. As the graph matures, those calls become rarer.
 
-Before calling any LLM, Horizon queries the Neo4j career graph. It finds the top roles by weighted skill overlap (`REQUIRES` edge weights), then traverses `TRANSITIONS_TO` edges up to 15 hops to find the farthest reachable terminal role. This returns validated career trajectories from historical data, not LLM guesses.
+**Parallel evidence fetch.** For each archetype, Tavily runs advanced searches constrained to high-signal domains (Blind, HN, Reddit, FAANG engineering blogs, LinkedIn). Up to 14 sources per archetype, fetched in parallel via `asyncio.gather`, tagged `SOURCE_REF_N` and injected into the synthesis prompt.
 
-If the graph has fewer than 5 trajectory matches (cold start), it falls back to Gemini for archetype generation.
+**Grounded synthesis.** Gemini 2.5 Flash generates the full `CareerTree` JSON under hard constraints: every stage must cite 3+ sources, `fit_score` is a cold probability not a confidence boost, `eta_months` is pulled from evidence patterns, `observed_paths` extracts actual career sequences from the scraped results.
 
-**Step 2: Parallel evidence fetch**
+**Graph evolution.** After synthesis, `observed_paths` (e.g. `["SWE II", "Senior SWE", "Staff SWE"]`) are written back to Neo4j as `TRANSITIONS_TO` edges. More users, denser graph, better priors, better trees.
 
-For each archetype, Tavily runs an advanced search constrained to high-signal domains:
-
-```
-reddit.com, news.ycombinator.com, teamblind.com, indiehackers.com,
-linkedin.com, medium.com, github.com, netflixtechblog.com,
-engineering.fb.com, openai.com/research
-```
-
-Up to 14 results per archetype are fetched in parallel (`asyncio.gather`). Each result is tagged with a `SOURCE_REF_N` identifier and injected into the synthesis prompt.
-
-**Step 3: Grounded synthesis**
-
-Gemini 2.5 Flash generates the full `CareerTree` JSON against strict rules:
-- Every stage must be triangulated from ≥3 source references
-- `fit_score` is a cold probability, accounting for skill gaps and market reality, not encouragement
-- `eta_months` is grounded in evidence patterns, not LLM priors
-- `top_opportunities` must be real, named roles or programs
-- `observed_paths` extracts actual career progressions seen in the evidence
-
-The model returns structured output against a Pydantic schema with `response_mime_type="application/json"`, leaving no parsing ambiguity.
-
-**Step 4: Citation resolution + graph learning**
-
-`SOURCE_REF_N` tags in stage citations are resolved back to real URLs. Then `observed_paths` (career sequences extracted from evidence, e.g. `["SWE Intern", "SWE II", "Senior SWE", "Staff SWE"]`) are written back to Neo4j via `evolve_paths`. Every synthesis run makes future traversals smarter.
-
-Trees are cached in Redis for 24 hours (`horizon:tree:v7:{user_id}`).
+Trees cached in Redis for 24h (`horizon:tree:v7:{user_id}`).
 
 ---
 
-### Company Advisory Cards (`discover.py`)
+## Company Advisory Cards (`discover.py`)
 
-Given a target role and a list of companies, Horizon generates a structured fit analysis card per company in parallel.
+Target role + companies in, structured fit cards out, generated in parallel.
 
-**JD Fetching:** Gemini + Google Search grounding fetches live job descriptions from Greenhouse, Lever, and company career pages. Returns a structured `{skills, resp}` object. JDs are cached in Redis for 30 minutes keyed on `(role, company, location)`.
+Two separate signal sources per company: Tavily pulls raw interview signals from Blind, Reddit, and HN (7-min cache); a separate Gemini web-grounded call extracts hard technical skills from live Greenhouse/Lever JDs (30-min cache). Both feed the final synthesis prompt.
 
-**Scoring Rubric**
+Gemini scores against a strict rubric:
 
 ```
-A (90-100):  >80% stack match + production proof in target ecosystem
-B (75-89):   >50% match, bridgeable via sibling tech (React→Vue, Java→Kotlin)
-C (60-74):   <50% match, paradigm shift required, 3+ month ramp
-D (<60):     Core engineering pillars missing
+A (90-100): >80% stack match + production proof in target ecosystem
+B (75-89):  >50% match, bridgeable via sibling tech
+C (60-74):  <50% match, paradigm shift required, 3+ month ramp
+D (<60):    Core engineering pillars missing
 
-Modifiers:
-  FAANG/unicorn experience  →  +5 pts
-  Level mismatch            →  hard cap 20
-  Ecosystem lock-in         →  hard cap 30
+Modifiers: FAANG/unicorn exp -> +5pts | level mismatch -> cap 20 | ecosystem lock-in -> cap 30
 ```
 
-Each `AdvisoryCard` includes: fit score, hiring bar difficulty, top 10 skill gaps strictly absent from the user's stack, a concise verdict (≤10 words), 3-4 verb-first actionable steps with named technologies, and the single highest-leverage advisory insight.
+Each `AdvisoryCard`: fit score, hiring bar difficulty, top 10 skill gaps strictly absent from the user's stack, a brutal sub-10-word verdict, 3-4 concrete next steps with named tech, one highest-signal advisory.
 
-Cards are generated in parallel via `asyncio.gather`. Every fresh JD fetch (cache miss) triggers a `graph.evolve(role, skills)` call, strengthening the role→skill graph.
+Every fresh JD fetch triggers `graph.evolve(role, skills)`, incrementing `REQUIRES` edge weights in Neo4j.
 
 ---
 
-### The Self-Improving Career Graph (`neo_graph.py`)
+## The Graph (`neo_graph.py`)
 
-The Neo4j graph is not a static knowledge base. It evolves continuously from two signal streams:
+Not a static knowledge base. Two live signal streams:
 
-**Signal 1: JD fetches (discover pipeline)**
-
-On every cache miss, extracted JD skills are written as weighted `REQUIRES` edges from a `Role` node to `Skill` nodes. Edge weights increment on repeated observations; roles accumulate stronger skill associations over time.
-
+**From the discover pipeline:** every JD cache miss writes extracted skills as weighted `REQUIRES` edges:
 ```cypher
-MERGE (r:Role {name: toLower($role)})
-MERGE (s:Skill {name: toLower(raw)})
 MERGE (r)-[e:REQUIRES]->(s)
   ON CREATE SET e.weight = 1.0, e.count = 1
   ON MATCH  SET e.count = e.count + 1, e.weight = e.weight + 0.1
 ```
 
-**Signal 2: Career tree synthesis**
-
-After every tree generation, observed career progressions extracted from evidence are ingested as `TRANSITIONS_TO` edges between consecutive role pairs. The more synthesis runs, the richer the transition graph becomes.
-
+**From tree synthesis:** observed career progressions ingested as `TRANSITIONS_TO` edges:
 ```cypher
-MERGE (r1:Role {name: toLower(path[i])})
-MERGE (r2:Role {name: toLower(path[i+1])})
 MERGE (r1)-[t:TRANSITIONS_TO]->(r2)
   ON MATCH SET t.count = t.count + 1
 ```
 
-Trajectory traversal (`find_trajectories`) uses weighted skill overlap to identify a starting role, then walks `TRANSITIONS_TO` edges up to 15 hops to find the terminal node, returning the full path as prior context for synthesis.
+Trajectory traversal walks `TRANSITIONS_TO` up to 15 hops, using weighted skill overlap to anchor the start role.
 
-This is a compound flywheel: more users → more JD fetches + synthesis runs → denser graph → better trajectory priors → higher-quality career trees.
+---
+
+## Onboarding (`onboarding/`)
+
+PDF ingested via PyMuPDF, converted to Markdown, parsed by Gemini into a structured schema (education, skills, projects). Skills canonicalized immediately through a synonym normalizer (`"ReactJS"` -> `"React"`).
+
+MBTI questionnaire samples per-dimension questions from MongoDB, scores via Likert scaling, stores the personality type to weight path preferences downstream.
 
 ---
 
 ## Architecture
 
 ```
-                    ┌─────────────────────────────────┐
-                    │           FastAPI Backend       │
-                    │         (fully async, uvicorn)  │
-                    └──────────┬──────────────┬───────┘
-                               │              │
-              ┌────────────────▼──┐      ┌────▼────────────────┐
-              │   Career Tree     │      │  Advisory Cards     │
-              │   tree.py         │      │  discover.py        │
-              └──────┬────────────┘      └──────────┬──────────┘
-                     │                              │
-         ┌───────────▼──────────────────────────────▼───────────┐
-         │                  neo_graph.py                        │
-         │   Neo4j  |  REQUIRES edges |  TRANSITIONS_TO edges   │
-         │   Graph-first retrieval |  Continuous evolution      │
-         └──────────────────────────────────────────────────────┘
-                     │                              │
-         ┌───────────▼──────┐         ┌─────────────▼──────────┐
-         │  Tavily Search   │         │   Gemini 2.5 Flash     │
-         │  (multi-key)     │         │   (structured output)  │
-         └──────────────────┘         └────────────────────────┘
-                     │
-         ┌───────────▼──────────────────────────────────────────┐
-         │                Redis (aioredis)                      │
-         │   Tree cache 24h  |  Intel cache 7min  |  JD 30min   │
-         └──────────────────────────────────────────────────────┘
-                     │
-         ┌───────────▼──────────────────────────────────────────┐
-         │              MongoDB (Motor async)                   │
-         │         User profiles  |  MBTI questions             │
-         └──────────────────────────────────────────────────────┘
+                    +---------------------------------+
+                    |        FastAPI Backend          |
+                    |      (fully async, uvicorn)     |
+                    +----------+-------------+--------+
+                               |             |
+              +----------------v--+      +---v-----------------+
+              |   Career Tree     |      |  Advisory Cards     |
+              |   tree.py         |      |  discover.py        |
+              +------+------------+      +----------+----------+
+                     |                             |
+         +-----------v-----------------------------v----------+
+         |                   neo_graph.py                    |
+         |  Neo4j | REQUIRES edges | TRANSITIONS_TO edges    |
+         |  Graph-first retrieval | Continuous evolution     |
+         +-----------------------------------------------------------+
+                     |                             |
+         +-----------v------+      +--------------v---------+
+         |  Tavily Search   |      |   Gemini 2.5 Flash     |
+         |  (multi-key)     |      |   (structured output)  |
+         +------------------+      +------------------------+
+                     |
+         +-----------v-------------------------------------------+
+         |               Redis (aioredis)                        |
+         |   Tree 24h  |  Intel 7min  |  JD 30min               |
+         +-------------------------------------------------------+
+                     |
+         +-----------v-------------------------------------------+
+         |             MongoDB (Motor async)                     |
+         |       User profiles  |  MBTI questions               |
+         +-------------------------------------------------------+
 ```
 
 ---
 
-## Tech Stack
+## Design Notes
+
+**Intelligence is distributed, not prompt-dependent.** The graph holds structural, persistent knowledge: role-to-skill weights and role-to-role transition priors that strengthen over time. The web intel layer (Blind, HN, Reddit, engineering blogs, live JDs) contributes the live, sourced signal that no static training set can match. The LLM synthesizes across both. None of the three is sufficient alone.
+
+**Structured output throughout.** Every Gemini call is bound to a Pydantic schema. No regex fallbacks, no ambiguous parsing at any layer.
+
+**Cache tiered by volatility.** Tree (24h), market intel, JDs. Each layer invalidated independently.
+
+**Cost observability.** Every LLM call logs token counts and cost with per-operation labels (`fetch_jd`, `build_card`, `synthesize_tree`). Built to know what each request actually costs.
+
+**Fully async.** FastAPI + Motor + aioredis + `asyncio.gather` throughout. Blocking I/O in `asyncio.to_thread`. The event loop never blocks.
+
+---
+
+## Stack
 
 | Layer | Technology |
 |---|---|
 | API | FastAPI, Uvicorn |
-| AI | Gemini 2.5 Flash, Gemini 2.5 Flash Lite |
-| Web Search | Tavily (advanced, multi-key rotation) |
+| AI | Gemini 2.5 Flash |
+| Web Evidence | Tavily (advanced, multi-key) |
 | Graph DB | Neo4j (async driver) |
-| Primary DB | MongoDB (Motor async + PyMongo) |
+| Primary DB | MongoDB (Motor async) |
 | Cache | Redis (aioredis) |
 | Resume Parsing | PyMuPDF, pymupdf4llm |
-| Auth | JWT (HS256) + bcrypt |
+| Auth | JWT HS256 + bcrypt |
 | Validation | Pydantic v2 |
 
 ---
 
-## Key Design Decisions
+Active development.
 
-**Graph before LLM.** Archetype discovery queries Neo4j first. The LLM is a fallback, not the default. As the graph matures, cold-start LLM calls become progressively rarer and the system's prior knowledge grows denser.
-
-**Evidence over inference.** Career paths are built from real Reddit threads, Blind posts, engineering blogs, and LinkedIn stories. Every citation in a generated tree resolves to an actual source URL — zero hallucinated advice.
-
-**Structured output everywhere.** Every Gemini call uses `response_mime_type="application/json"` bound to a Pydantic schema. The model cannot return malformed output; no regex fallbacks or output ambiguity at any layer.
-
-**Cache tiered by data volatility.** Tree cache runs 24h (user profiles rarely change meaningfully), company intel at 7 minutes (market-sensitive), JDs at 30 minutes (semi-stable). Each layer is independently invalidated.
-
-**Cost observability from day one.** Every Gemini call logs input/output token counts and cost in INR with per-operation attribution (`fetch_jd`, `build_card`, etc.). Built to run a credit-based product without financial blind spots.
-
-**Fully async, no blocking.** FastAPI + Motor + aioredis + `asyncio.gather` throughout. All blocking I/O (Tavily, sync PyMongo) is isolated in `asyncio.to_thread`. The event loop never blocks.
-
----
-
-## Project Structure
-
-```
-horizon/
-├── main.py               # FastAPI app, routing, market intel
-├── tree.py               # Career tree generation pipeline
-├── discover.py           # Company advisory card engine
-├── neo_graph.py          # Neo4j graph: evolution + traversal
-├── ops.py                # JWT auth, MongoDB client, cost logging
-└── onboarding/
-    ├── models.py          # Pydantic schemas (User, Profile, etc.)
-    ├── user.py            # MongoDB user CRUD + skill normalization
-    ├── parse_resume.py    # PDF → structured data via Gemini
-    ├── mbti_questionnaire.py  # MBTI sampling + scoring engine
-    └── normalizer/
-        └── normalizer.py  # Skill canonicalization
-```
-
----
-
-## API Reference
-
-| Method | Endpoint | Description |
-|---|---|---|
-| `POST` | `/auth/register` | Register + issue JWT |
-| `POST` | `/auth/login` | Login + issue JWT |
-| `POST` | `/users/me/resume` | Upload PDF, parse to structured profile |
-| `GET` | `/personality/questions` | Fetch MBTI questionnaire |
-| `POST` | `/users/me/personality` | Submit answers, compute MBTI type |
-| `POST` | `/discover/search` | Generate company advisory cards |
-| `GET` | `/career/tree` | Generate full 5-path career roadmap |
-
----
-
-## Status
-
-Active development. Live beta coming soon.
-
-[Rushikesh Yeole](https://x.com/RushikeshYeole_)
-
----
-
-*Horizon is infrastructure for career intelligence. The graph learns. The advice gets sharper. The market signal is always live.*
+Built by [Rushikesh](https://www.linkedin.com/in/rushikesh-yeole-9115702aa) & [Shashwat](https://www.linkedin.com/in/shashwat-awate-23127a29b).
+</br>Would love to hear your thoughts or ideas! Feel free to reach out.

@@ -47,7 +47,7 @@ const FeatureCard = ({ icon: Icon, title, desc, delay, to, disabled, tag, highli
               {title}
             </h3>
             <p className="text-neutral-700 text-base leading-relaxed mb-6">{desc}</p>
-            
+
             {highlights && highlights.length > 0 && (
               <ul className="space-y-2 mb-6 border-t border-neutral-100 pt-4">
                 {highlights.map((h, idx) => (
@@ -71,26 +71,18 @@ const FeatureCard = ({ icon: Icon, title, desc, delay, to, disabled, tag, highli
 
 export default function Home() {
   const { email, isAuthenticated } = useAuth();
-  const isDemo = email === 'demo@horizon.com';
 
   return (
-    <div className="min-h-screen pt-24 sm:pt-28 pb-16 px-4 sm:px-6 max-w-6xl mx-auto">
+    <div className="min-h-screen pt-24 sm:pt-28 pb-16 px-4 sm:px-8 lg:px-12 xl:px-16 max-w-[1680px] w-full mx-auto">
       {/* Hero Section */}
       <div className="max-w-4xl mx-auto text-center mb-16">
         <FadeIn delay={0.05}>
-          <div className="inline-flex items-center gap-2.5 px-3.5 sm:px-4 py-1.5 rounded-full border border-neutral-300 bg-neutral-50/90 text-neutral-900 text-xs sm:text-sm font-semibold mb-6 sm:mb-8 shadow-2xs max-w-full">
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-            <span className="truncate">Living Neo4j Career Graph • Gemini 2.5 Synthesis</span>
-          </div>
-        </FadeIn>
-        
-        <FadeIn delay={0.1}>
           <h1 className="text-3xl xs:text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight text-neutral-950 mb-6 leading-[1.08]">
             Career intelligence,<br />
             grounded in market reality.
           </h1>
         </FadeIn>
-        
+
         <FadeIn delay={0.15}>
           <p className="text-base sm:text-2xl text-neutral-700 max-w-3xl mx-auto font-normal leading-relaxed mb-8 sm:mb-10">
             Horizon couples a living Neo4j graph with 14x parallel web scrapers to triangulate verified career trajectories, live hiring bars, and skill gap roadmaps.
@@ -138,13 +130,12 @@ export default function Home() {
 
       {/* Modules Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-16">
-        <FeatureCard 
-          to="/ingest"
+        <FeatureCard
+          to={isAuthenticated ? "/profile" : "/ingest"}
           delay={0.25}
           icon={Layers}
           title="Profile Ingestion"
           desc="PyMuPDF ingests your resume into Markdown, then Gemini 2.5 Flash extracts canonical skills, education, and projects into structured Pydantic schemas."
-          disabled={isDemo}
           tag="Pipeline 01"
           highlights={[
             "PDF to Markdown extraction",
@@ -152,7 +143,7 @@ export default function Home() {
             "Motor async MongoDB storage"
           ]}
         />
-        <FeatureCard 
+        <FeatureCard
           to="/discover"
           delay={0.3}
           icon={Compass}
@@ -165,7 +156,7 @@ export default function Home() {
             "Top 10 absent skill gaps"
           ]}
         />
-        <FeatureCard 
+        <FeatureCard
           to="/tree"
           delay={0.35}
           icon={GitBranch}
@@ -218,8 +209,25 @@ export default function Home() {
       {/* Footer */}
       <FadeIn delay={0.45}>
         <div className="mt-14 text-center border-t border-neutral-200/90 pt-6">
-          <p className="text-neutral-500 text-xs font-semibold tracking-wide">
-            Horizon Infrastructure for Career Intelligence • Built by Rushikesh Yeole & Shashwat Awate
+          <p className="text-neutral-500 text-md font-medium tracking-wide">
+            Horizon Infrastructure for Career Intelligence <br></br> Built by{' '}
+            <a
+              href="https://www.linkedin.com/in/rushikesh-yeole-9115702aa"
+              target="_blank"
+              rel="noreferrer"
+              className="text-neutral-900 font-semibold hover:underline decoration-neutral-400 underline-offset-2 transition-all"
+            >
+              Rushikesh Yeole
+            </a>
+            {' & '}
+            <a
+              href="https://www.linkedin.com/in/shashwat-awate-23127a29b/"
+              target="_blank"
+              rel="noreferrer"
+              className="text-neutral-900 font-semibold hover:underline decoration-neutral-400 underline-offset-2 transition-all"
+            >
+              Shashwat Awate
+            </a>
           </p>
         </div>
       </FadeIn>

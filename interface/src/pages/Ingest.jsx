@@ -6,20 +6,22 @@ import API from "../services/api";
 import { toast } from "sonner";
 
 export default function Ingest() {
-  const { login, setLoading, loading, email } = useAuth();
+  const { login, setLoading, loading, email, isAuthenticated } = useAuth();
   const navigate = useNavigate();
   const fileInputRef = useRef(null);
 
   useEffect(() => {
-    if (email === 'demo@horizon.com') {
-      navigate('/discover');
-      toast.error("Profile ingestion is disabled in demo mode.");
+    if (isAuthenticated) {
+      navigate('/profile');
     }
-  }, [email, navigate]);
+  }, [isAuthenticated, navigate]);
 
   const [questions, setQuestions] = useState([]);
   const [resumeUploading, setResumeUploading] = useState(false);
   const [resumeUploaded, setResumeUploaded] = useState(false);
+  const [showOtpModal, setShowOtpModal] = useState(false);
+  const [otpValue, setOtpValue] = useState("");
+  const finalPayloadRef = useRef(null);
 
   const [formData, setFormData] = useState({
     email: "",
@@ -43,13 +45,15 @@ export default function Ingest() {
   useEffect(() => {
     API.get("/personality/questions")
       .then((res) => {
-        setQuestions(res.data.questions);
+        const fetchedQuestions = res.data.questions || [];
+        setQuestions(fetchedQuestions);
         // Initialize personality answers
         setFormData(prev => ({
           ...prev,
-          personality_answers: res.data.questions.map(q => ({
-            question_id: q.id,
-            answer_value: 3
+          personality_answers: fetchedQuestions.map(q => ({
+            id: q.id,
+            type: q.type,
+            score: 3
           }))
         }));
       })
@@ -108,42 +112,86 @@ export default function Ingest() {
     setFormData((prev) => ({
       ...prev,
       personality_answers: prev.personality_answers.map(ans => 
-        ans.question_id === questionId ? { ...ans, answer_value: value } : ans
+        ans.id === questionId ? { ...ans, score: value } : ans
       )
     }));
   };
 
-  const handleFinalSubmit = async () => {
+  const handleRequestOtp = async () => {
+    if (!formData.email || !formData.password) {
+      toast.error("Please provide both email and password.");
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const personaRes = await API.post(
-        "/users/me/personality",
-        { answers: formData.personality_answers }
-      );
+      let personaData = { completed: false, scores: {}, type: "" };
+      if (formData.personality_answers && formData.personality_answers.length > 0) {
+        try {
+          const personaRes = await API.post(
+            "/personality/evaluate",
+            { answers: formData.personality_answers.map(a => ({ type: a.type, score: a.score })) }
+          );
+          if (personaRes?.data) {
+            personaData = {
+              completed: true,
+              scores: personaRes.data.scores || {},
+              type: personaRes.data.persona || ""
+            };
+          }
+        } catch (evalErr) {
+          console.warn("Personality evaluation skipped or failed:", evalErr);
+        }
+      }
 
-      const finalPayload = {
+      finalPayloadRef.current = {
         email: formData.email,
         password: formData.password,
         profile: formData.profile,
-        personality: {
-          completed: true,
-          scores: personaRes.data.scores,
-          type: personaRes.data.persona
-        }
+        personality: personaData
       };
 
-      const registerRes = await API.post(
-        "/auth/register",
-        finalPayload
-      );
+      await API.post("/auth/send-otp", { email: formData.email });
+      setShowOtpModal(true);
+      toast.success("OTP sent to your email!");
+    } catch (err) {
+      console.error("Failed to request OTP:", err);
+      const msg = err.response?.data?.msg || err.response?.data?.err || "Failed to send OTP.";
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      login(registerRes.data.access_token);
-      navigate("/");
+  const handleVerifyAndRegister = async () => {
+    if (!otpValue || otpValue.length < 6) {
+      toast.error("Please enter a valid 6-digit OTP.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const payloadWithOtp = {
+        ...finalPayloadRef.current,
+        otp: otpValue
+      };
+
+      const registerRes = await API.post("/auth/register", payloadWithOtp);
+
+      if (registerRes?.data?.access_token) {
+        login(registerRes.data.access_token, formData.email);
+        toast.success("Account initialized successfully!");
+        navigate("/");
+      } else {
+        throw new Error(registerRes?.data?.msg || "Registration failed");
+      }
 
     } catch (err) {
       console.error("Registration failed:", err);
-      toast.error("Registration failed. Check console.");
+      const msg = err.response?.data?.msg || err.response?.data?.err || "Registration failed. Check console.";
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -247,20 +295,21 @@ export default function Ingest() {
             
             <div className="space-y-8">
               {questions.map((q) => {
-                const answer = formData.personality_answers.find(a => a.question_id === q.id);
-                const value = answer ? answer.answer_value : 3;
+                const answer = formData.personality_answers.find(a => a.id === q.id);
+                const value = answer ? answer.score : 3;
 
                 return (
                   <div key={q.id}>
-                    <p className="text-sm font-semibold text-neutral-800 mb-4">{q.text}</p>
+                    <p className="text-sm font-semibold text-neutral-800 mb-4">{q.question || q.text}</p>
                     <div className="flex items-center justify-between gap-4">
                       <span className="text-xs font-medium text-neutral-500 w-16 text-right">Disagree</span>
                       <div className="flex-1 flex justify-between px-2">
                         {[1, 2, 3, 4, 5].map((val) => (
                           <button
                             key={val}
+                            type="button"
                             onClick={() => handleAnswerChange(q.id, val)}
-                            className={`w-8 h-8 rounded-full border-2 transition-all ${
+                            className={`w-8 h-8 rounded-full border-2 transition-all cursor-pointer ${
                               value === val 
                                 ? 'border-neutral-950 bg-neutral-950 text-white' 
                                 : 'border-neutral-300 text-transparent hover:border-neutral-400'
@@ -279,12 +328,12 @@ export default function Ingest() {
           {/* Submit Action */}
           <div className="pt-4">
             <button 
-              onClick={handleFinalSubmit}
+              onClick={handleRequestOtp}
               disabled={loading}
               className="w-full py-4 rounded-xl bg-black text-white font-bold text-lg hover:bg-neutral-800 transition-all shadow-md disabled:opacity-70 flex items-center justify-center gap-2"
             >
               {loading ? (
-                <span className="animate-pulse">Initializing...</span>
+                <span className="animate-pulse">Processing...</span>
               ) : (
                 <>
                   Initialize <Cpu size={20} />
@@ -294,6 +343,42 @@ export default function Ingest() {
           </div>
         </div>
       </div>
+
+      {/* OTP Verification Modal */}
+      {showOtpModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl shadow-xl w-full max-w-md p-8 animate-fade-in relative">
+            <h2 className="text-2xl font-bold mb-2">Verify Email</h2>
+            <p className="text-neutral-500 mb-6 text-sm">
+              We've sent a 6-digit verification code to <strong>{formData.email}</strong>.
+            </p>
+            <input
+              type="text"
+              placeholder="Enter 6-digit OTP"
+              value={otpValue}
+              onChange={(e) => setOtpValue(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl border border-neutral-300 focus:border-neutral-950 focus:ring-1 focus:ring-neutral-950 outline-none text-center text-xl tracking-widest font-mono mb-6"
+              maxLength={6}
+            />
+            <div className="flex gap-4">
+              <button
+                onClick={() => setShowOtpModal(false)}
+                className="flex-1 py-3 rounded-xl border border-neutral-300 text-neutral-700 font-semibold hover:bg-neutral-50 transition-all"
+                disabled={loading}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleVerifyAndRegister}
+                disabled={loading || otpValue.length < 6}
+                className="flex-1 py-3 rounded-xl bg-black text-white font-semibold hover:bg-neutral-800 transition-all disabled:opacity-50"
+              >
+                {loading ? "Verifying..." : "Verify & Register"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

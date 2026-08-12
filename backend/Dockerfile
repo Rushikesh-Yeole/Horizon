@@ -15,8 +15,9 @@ RUN apt-get update && apt-get install -y \
 
 # Install Python dependencies
 COPY requirements.txt .
+# Pre-install CPU-only PyTorch to prevent downloading massive NVIDIA CUDA GPU binaries (saves ~3GB of bloat)
+RUN pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 RUN pip install --no-cache-dir -r requirements.txt
-RUN pip install openai
 
 # Copy project
 COPY . .
@@ -24,5 +25,5 @@ COPY . .
 # Expose port
 EXPOSE 8000
 
-# Command to run the application
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Command to run the application (Uses PORT env var provided by Cloud Run, defaults to 8000 locally)
+CMD uvicorn main:app --host 0.0.0.0 --port ${PORT:-8000}

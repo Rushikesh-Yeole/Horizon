@@ -3,7 +3,7 @@ import api from '../services/api';
 import { toast } from 'sonner';
 import { useAuth } from '../context/AuthContext';
 import { Card, Button, Input } from '../components/UI';
-import { Search, Zap, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
+import { Search, Zap, AlertTriangle, CheckCircle, Loader2, RefreshCw, Database, Globe } from 'lucide-react';
 
 export default function Discover() {
   const { token } = useAuth();
@@ -14,40 +14,62 @@ export default function Discover() {
   });
   const [results, setResults] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [refreshingCompany, setRefreshingCompany] = useState(null);
 
-  const runPhysicsEngine = async () => {
+  const runSearch = async (forceRefresh = false, singleCompany = null) => {
     if (!token) {
-        toast.error("Session expired. Please re-initialize.");
-        return;
+      toast.error("Session expired. Please re-initialize.");
+      return;
     }
 
-    setLoading(true);
+    if (singleCompany) setRefreshingCompany(singleCompany);
+    else setLoading(true);
+
+    const targetCompanies = singleCompany 
+      ? [singleCompany]
+      : criteria.companies.split(",").map((c) => c.trim());
+
     try {
       const res = await api.post(
-            "/discover/search",
-            {
-              search_criteria: {
-                role: criteria.role,
-                location: criteria.location,
-                target_companies: criteria.companies
-                  .split(",")
-                  .map((c) => c.trim()),
-              }
-            }
+        `/discover/search${forceRefresh ? '?force_refresh=true' : ''}`,
+        {
+          search_criteria: {
+            role: criteria.role,
+            location: criteria.location,
+            target_companies: targetCompanies,
+          }
+        }
       );
-      setResults(res.data.guidance_cards);
+      const newCards = res.data.guidance_cards;
+      if (singleCompany) {
+        setResults(prev => prev.map(c => 
+          c.company_name === singleCompany ? (newCards[0] || c) : c
+        ));
+        toast.success(`Refreshed ${singleCompany} with live data.`);
+      } else {
+        setResults(newCards);
+      }
     } catch (err) {
       const errorMsg = err.response?.data?.detail || "Physics Engine Stalled. Backend unreachable.";
-      console.error("Audit Error:", err);
       toast.error(`System Failure: ${errorMsg}`);
     } finally {
       setLoading(false);
+      setRefreshingCompany(null);
     }
   };
 
+  const formatDate = (isoStr) => {
+    if (!isoStr) return null;
+    try {
+      return new Date(isoStr).toLocaleDateString('en-US', { 
+        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
+      });
+    } catch { return null; }
+  };
+
   return (
-    <div className="max-w-4xl mx-auto pt-24 sm:pt-28 pb-20 px-4 sm:px-6 animate-fade-in">
-      {/* Header Section */}
+    <div className="max-w-[1680px] w-full mx-auto pt-24 sm:pt-28 pb-20 px-4 sm:px-8 lg:px-12 xl:px-16 animate-fade-in">
+      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end gap-3 mb-8 sm:mb-10">
         <div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-neutral-950">Discovery Search</h1>
@@ -56,43 +78,76 @@ export default function Discover() {
       </div>
 
       {/* Input Control Panel */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-10 sm:mb-12">
-        <div className="md:col-span-1">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 mb-10 sm:mb-12">
+        <div className="lg:col-span-1">
           <Input label="Target Role" value={criteria.role} onChange={e => setCriteria({...criteria, role: e.target.value})} />
         </div>
-        <div className="md:col-span-1">
+        <div className="lg:col-span-1">
           <Input label="Geography" value={criteria.location} onChange={e => setCriteria({...criteria, location: e.target.value})} />
         </div>
-        <div className="md:col-span-1">
+        <div className="lg:col-span-1">
           <Input label="Target Firms (multiple)" placeholder="Comma separated" value={criteria.companies} onChange={e => setCriteria({...criteria, companies: e.target.value})} />
         </div>
-        <div className="md:col-span-1 flex items-end">
-          <Button onClick={runPhysicsEngine} isLoading={loading} className="w-full h-11 sm:h-12 shadow-sm">
+        <div className="lg:col-span-1 flex items-end">
+          <Button onClick={() => runSearch(false)} isLoading={loading} className="w-full h-11 sm:h-12 shadow-sm">
             {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2 inline" /> : <Search className="w-4 h-4 mr-2 inline" />} 
             Search
           </Button>
         </div>
       </div>
 
-      {/* Results Mapping */}
-      <div className="space-y-6">
+      {/* Results */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6 items-start">
         {results?.map((card, i) => (
-          <Card key={i} className="border-l-4 border-l-neutral-950 group">
+          <Card key={i} className={`border-l-4 border-l-neutral-950 group ${results.length === 1 ? 'xl:col-span-2' : ''}`}>
             <div className="flex flex-col sm:flex-row justify-between items-start gap-4 mb-4">
-              <div>
+              <div className="flex-1">
                 <h2 className="text-xl sm:text-2xl font-bold capitalize tracking-tight text-neutral-950">{card.company_name}</h2>
                 <div className="flex flex-wrap gap-2 items-center mt-1.5">
-                   <span className="text-[10px] uppercase tracking-widest bg-neutral-100 px-2 py-0.5 rounded font-bold text-neutral-700">
+                  <span className="text-[10px] uppercase tracking-widest bg-neutral-100 px-2 py-0.5 rounded font-bold text-neutral-700">
                     {card.hiring_bar_difficulty} Bar
                   </span>
-                   <span className="text-[10px] uppercase tracking-widest text-neutral-500 font-bold">
+                  <span className="text-[10px] uppercase tracking-widest text-neutral-500 font-bold">
                     {card.feasibility_timeline_weeks} Weeks to bridge
                   </span>
+
+                  {/* Cache status badge */}
+                  {card.from_cache !== undefined && (
+                    <span className={`inline-flex items-center gap-1 text-[10px] uppercase tracking-widest font-bold px-2 py-0.5 rounded ${
+                      card.from_cache 
+                        ? 'bg-amber-50 text-amber-700 border border-amber-200' 
+                        : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                    }`}>
+                      {card.from_cache 
+                        ? <><Database className="w-2.5 h-2.5" /> Cached</> 
+                        : <><Globe className="w-2.5 h-2.5" /> Live</>}
+                    </span>
+                  )}
+
+                  {/* Retrieved at */}
+                  {card.retrieved_at && (
+                    <span className="text-[10px] text-neutral-400 font-medium">
+                      Retrieved {formatDate(card.retrieved_at)}
+                    </span>
+                  )}
                 </div>
               </div>
-              <div className="text-left sm:text-right self-start">
-                <div className="text-3xl sm:text-4xl font-extrabold tracking-tighter tabular-nums text-neutral-950">{card.fit_score}%</div>
-                <div className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Fit Score</div>
+
+              <div className="flex flex-col items-end gap-2 self-start shrink-0">
+                <div className="text-right">
+                  <div className="text-3xl sm:text-4xl font-extrabold tracking-tighter tabular-nums text-neutral-950">{card.fit_score}%</div>
+                  <div className="text-[10px] font-bold text-neutral-500 uppercase tracking-widest">Evidence Coverage</div>
+                </div>
+                {/* Re-run Research */}
+                <button
+                  onClick={() => runSearch(true, card.company_name)}
+                  disabled={refreshingCompany === card.company_name}
+                  title="Bypass cache — fetch live JD & intel"
+                  className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-neutral-400 hover:text-neutral-900 transition-colors disabled:opacity-40 cursor-pointer"
+                >
+                  <RefreshCw className={`w-3 h-3 ${refreshingCompany === card.company_name ? 'animate-spin' : ''}`} />
+                  {refreshingCompany === card.company_name ? 'Refreshing…' : 'Re-run Research'}
+                </button>
               </div>
             </div>
             
@@ -105,7 +160,6 @@ export default function Discover() {
                   <Zap className="w-3 h-3 mr-1.5 fill-neutral-950"/> Reasoning Trace
                 </h3>
                 <p className="text-xs sm:text-sm font-mono text-neutral-700 leading-relaxed italic">{card.reasoning_trace}</p>
-                {/* main_advisory_text */}
                 <h3 className="text-[11px] sm:text-[12px] font-bold uppercase text-neutral-500 mb-2.5 mt-5 flex items-center tracking-widest">
                   <Zap className="w-3 h-3 mr-1.5 fill-neutral-950"/> Advice
                 </h3>
@@ -143,8 +197,8 @@ export default function Discover() {
         
         {/* Empty State */}
         {!results && !loading && (
-          <div className="py-20 text-center border-2 border-dashed border-gray-200 rounded-3xl">
-            <p className="text-gray-400 font-medium">Input parameters to query the Search Engine.</p>
+          <div className="col-span-full py-20 text-center border-2 border-dashed border-neutral-200 rounded-3xl">
+            <p className="text-neutral-400 font-medium font-mono text-sm">Input parameters to query the Search Engine.</p>
           </div>
         )}
       </div>

@@ -11,6 +11,8 @@ interface/.env
 interface/node_modules
 backend/.env
 backend/env.yaml
+*-credential.txt
+*.credential.txt
 
 # IDEs
 .vscode/
@@ -25,3 +27,4 @@ Thumbs.db
 .tmp_pr/
 docs/
 artifacts/
+backend/run.txt

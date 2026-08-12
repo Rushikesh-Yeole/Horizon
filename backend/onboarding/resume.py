@@ -7,11 +7,26 @@ import os
 resume_router = APIRouter()
 client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
 
+MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5 MB
+
+
+async def _validate_upload(file: UploadFile) -> bytes:
+    """Read, size-cap, and type-check an uploaded file. Returns raw bytes."""
+    if file.content_type != "application/pdf":
+        raise HTTPException(422, detail="Only PDF files are accepted.")
+    content = await file.read()
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(422, detail="File exceeds 5 MB limit.")
+    return content
+
+
 @resume_router.post("/parse_resume")
 async def parse_resume(file: UploadFile = File(...)):
     try:
+        content = await _validate_upload(file)
+        import io
         text = ""
-        with pdfplumber.open(file.file) as pdf:
+        with pdfplumber.open(io.BytesIO(content)) as pdf:
             for page in pdf.pages:
                 extracted = page.extract_text()
                 if extracted:
@@ -27,5 +42,7 @@ async def parse_resume(file: UploadFile = File(...)):
         )
         
         return response.choices[0].message.parsed.model_dump()
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

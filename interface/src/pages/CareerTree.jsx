@@ -80,7 +80,8 @@ const StageCard = ({ stage, index, isLast }) => {
 
 export default function CareerTree() {
   const { token } = useAuth();
-  const [expandedPath, setExpandedPath] = useState(null);
+  const [selectedPathIndex, setSelectedPathIndex] = useState(0);
+  const [mobileExpandedPath, setMobileExpandedPath] = useState(0);
 
   const { data: tree, isLoading: loading, error, refetch } = useQuery({
     queryKey: ['careerTree'],
@@ -102,25 +103,27 @@ export default function CareerTree() {
     </div>
   );
 
+  const activePath = tree?.paths?.[selectedPathIndex] || tree?.paths?.[0];
+
   return (
-    <div className="min-h-screen bg-white pt-24 sm:pt-28 pb-20 px-4 sm:px-6 md:px-8">
+    <div className="min-h-screen bg-white pt-24 sm:pt-28 pb-20 px-4 sm:px-8 lg:px-12 xl:px-16 max-w-[1680px] w-full mx-auto">
       
       {/* Header */}
-      <div className="max-w-2xl mx-auto text-center mb-10 sm:mb-12 animate-fade-in relative">
+      <div className="max-w-3xl mx-auto text-center mb-10 sm:mb-12 animate-fade-in relative">
         <div className="inline-flex items-center justify-center px-4 py-1.5 bg-neutral-50 rounded-full shadow-2xs border border-neutral-200 mb-4 sm:mb-5">
           <BookOpen className="w-3.5 h-3.5 mr-2 text-indigo-600" />
           <span className="text-[10px] font-mono font-bold uppercase tracking-widest text-neutral-600">Evidence-Based Roadmap</span>
         </div>
         <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-neutral-950 mb-3 sm:mb-4">The Serendipity Engine</h1>
         <p className="text-sm sm:text-base text-neutral-600 mb-6 leading-relaxed">
-          Analyzed 42+ real-world trajectories & web evidence.<br />
-          Synthesized <span className="text-neutral-950 font-semibold">3 Personalized Paths</span>.
+          Analyzed 42+ real-world trajectories & market evidence.<br />
+          Synthesized <span className="text-neutral-950 font-semibold">3 Personalized Career Paths</span>.
         </p>
         
         <button 
           onClick={() => refetch()}
           disabled={loading}
-          className="inline-flex items-center gap-2 px-5 py-2.5 bg-white border border-neutral-200 rounded-full text-xs font-bold text-neutral-800 hover:border-neutral-950 hover:bg-neutral-50 transition-all shadow-2xs active:scale-95 disabled:opacity-50"
+          className="inline-flex items-center gap-2 px-5 py-2.5 bg-white border border-neutral-200 rounded-full text-xs font-bold text-neutral-800 hover:border-neutral-950 hover:bg-neutral-50 transition-all shadow-2xs active:scale-95 disabled:opacity-50 cursor-pointer"
         >
           <RefreshCw size={14} className={clsx(loading && "animate-spin")} />
           {loading ? "Doing Deep research..." : "Recalibrate Trajectories"}
@@ -135,10 +138,144 @@ export default function CareerTree() {
         </div>
       )}
 
-      {/* Stacked Accordion */}
-      <div className="max-w-3xl mx-auto space-y-4 sm:space-y-5">
+      {/* 1. LAPTOP DUAL-PANE VIEW (Visible on lg/xl screens) */}
+      <div className="hidden lg:grid lg:grid-cols-12 gap-8 items-start">
+        
+        {/* Left Column: Trajectory Switcher Sidebar */}
+        <div className="lg:col-span-4 space-y-4 sticky top-24">
+          <div className="flex items-center justify-between pb-2 border-b border-neutral-200">
+            <span className="text-xs font-mono font-bold uppercase tracking-wider text-neutral-500">Synthesized Trajectories</span>
+            <span className="text-xs font-mono text-neutral-400">3 Paths</span>
+          </div>
+
+          <div className="space-y-3">
+            {tree?.paths?.map((path, idx) => {
+              const isSelected = selectedPathIndex === idx;
+              const isBestFit = idx === 0;
+
+              return (
+                <div
+                  key={path.id || idx}
+                  onClick={() => setSelectedPathIndex(idx)}
+                  className={clsx(
+                    "p-5 rounded-2xl border transition-all duration-200 cursor-pointer text-left relative",
+                    isSelected
+                      ? "bg-neutral-950 text-white border-neutral-950 shadow-md ring-2 ring-neutral-950/10"
+                      : "bg-white text-neutral-900 border-neutral-200/80 hover:border-neutral-400 hover:bg-neutral-50/50 shadow-2xs"
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-3 mb-2">
+                    <div className="flex items-center gap-2.5">
+                      <span className={clsx(
+                        "w-6 h-6 rounded-md flex items-center justify-center text-xs font-mono font-bold shrink-0",
+                        isSelected ? "bg-white text-neutral-950" : "bg-neutral-100 text-neutral-800"
+                      )}>
+                        {idx + 1}
+                      </span>
+                      <h3 className={clsx("font-bold text-sm leading-snug", isSelected ? "text-white" : "text-neutral-950")}>
+                        {path.title}
+                      </h3>
+                    </div>
+                  </div>
+
+                  <p className={clsx("text-xs line-clamp-2 mb-3 leading-relaxed", isSelected ? "text-neutral-300" : "text-neutral-600")}>
+                    {path.summary}
+                  </p>
+
+                  <div className="flex items-center justify-between pt-2 border-t border-neutral-200/30 text-xs font-mono">
+                    <div className="flex items-center gap-3">
+                      <span className={clsx("flex items-center font-semibold", isSelected ? "text-emerald-400" : "text-emerald-600")}>
+                        <Target size={12} className="mr-1" /> {(path.fit_score).toFixed(0)}% Match
+                      </span>
+                      <span className={clsx("flex items-center", isSelected ? "text-neutral-400" : "text-neutral-500")}>
+                        <Clock size={12} className="mr-1" /> ~{path.stages?.reduce((a, c) => a + c.eta_months, 0)} Mo
+                      </span>
+                    </div>
+                    {isBestFit && (
+                      <span className={clsx(
+                        "px-2 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider flex items-center shrink-0",
+                        isSelected ? "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30" : "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                      )}>
+                        Top Match
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* System Verification Capsule */}
+          <div className="p-4 rounded-2xl bg-neutral-50 border border-neutral-200/80 text-xs font-mono text-neutral-600 space-y-1.5">
+            <div className="flex justify-between items-center text-[10px] font-bold uppercase text-neutral-400">
+              <span>Graph Intelligence</span>
+              <span className="text-emerald-600">Deterministic</span>
+            </div>
+            <div className="flex justify-between text-neutral-700">
+              <span>Verified Biographies:</span>
+              <span className="font-semibold text-neutral-950">42 Profiles</span>
+            </div>
+            <div className="flex justify-between text-neutral-700">
+              <span>Graph Hop Depth:</span>
+              <span className="font-semibold text-neutral-950">15-Hop Neo4j</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Right Column: Active Trajectory Detail Timeline */}
+        <div className="lg:col-span-8 space-y-6">
+          {activePath && (
+            <div className="animate-fade-in space-y-6">
+              {/* Strategic Intent Hero Card */}
+              <div className="bg-neutral-50/70 p-6 sm:p-7 rounded-3xl border border-neutral-200/80 shadow-2xs">
+                <div className="flex items-center justify-between gap-4 mb-3">
+                  <div className="flex items-center gap-3">
+                    <span className="px-2.5 py-1 rounded-lg bg-neutral-950 text-white font-mono text-xs font-bold">
+                      Path 0{selectedPathIndex + 1}
+                    </span>
+                    <h2 className="text-xl sm:text-2xl font-extrabold text-neutral-950 tracking-tight">
+                      {activePath.title}
+                    </h2>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-xs font-mono font-bold px-3 py-1 bg-white border border-neutral-200 rounded-full text-neutral-800 shadow-2xs">
+                      {(activePath.fit_score).toFixed(0)}% Profile Fit
+                    </span>
+                  </div>
+                </div>
+
+                <p className="text-sm text-neutral-700 leading-relaxed pt-2 border-t border-neutral-200/60">
+                  {activePath.summary}
+                </p>
+              </div>
+
+              {/* Sequential Checkpoint Timeline */}
+              <div className="bg-white p-6 sm:p-8 rounded-3xl border border-neutral-200/80 shadow-2xs">
+                <div className="mb-6 pb-3 border-b border-neutral-100 flex items-center justify-between">
+                  <span className="text-xs font-mono font-bold uppercase tracking-wider text-neutral-500">
+                    Sequential Execution Path ({activePath.stages?.length || 0} Checkpoints)
+                  </span>
+                  <span className="text-xs font-mono text-neutral-400">
+                    Est. {activePath.stages?.reduce((a, c) => a + c.eta_months, 0)} Months Total
+                  </span>
+                </div>
+
+                <div className="pl-2">
+                  {activePath.stages?.map((stage, sIdx) => (
+                    <StageCard key={sIdx} stage={stage} index={sIdx} isLast={sIdx === activePath.stages.length - 1} />
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+      </div>
+
+      {/* 2. MOBILE ACCORDION VIEW (Visible on mobile/tablet screens < lg) */}
+      <div className="block lg:hidden space-y-4">
         {tree?.paths?.map((path, idx) => {
-          const isExpanded = expandedPath === idx;
+          const isExpanded = mobileExpandedPath === idx;
           const isBestFit = idx === 0;
 
           return (
@@ -148,11 +285,11 @@ export default function CareerTree() {
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: idx * 0.1 }}
               className={clsx(
-                "bg-white rounded-2xl sm:rounded-3xl overflow-hidden border transition-all duration-300",
+                "bg-white rounded-2xl overflow-hidden border transition-all duration-300",
                 isExpanded ? "shadow-xl shadow-black/5 border-neutral-300 ring-1 ring-neutral-950/5" : "shadow-2xs border-neutral-200/80 hover:border-neutral-400 cursor-pointer"
               )}
             >
-              <div onClick={() => setExpandedPath(isExpanded ? null : idx)} className="p-4 sm:p-6 flex items-center justify-between gap-3">
+              <div onClick={() => setMobileExpandedPath(isExpanded ? null : idx)} className="p-4 sm:p-6 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 sm:gap-5 min-w-0">
                   <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl flex items-center justify-center text-base sm:text-lg font-bold shrink-0 shadow-inner bg-neutral-950 text-white">
                     {idx + 1}
@@ -183,12 +320,12 @@ export default function CareerTree() {
                     exit={{ height: 0, opacity: 0 }}
                     transition={{ duration: 0.3 }}
                   >
-                    <div className="px-4 sm:px-6 md:px-8 pb-6 sm:pb-8 pt-2 border-t border-neutral-100 bg-neutral-50/40">
-                      <div className="mb-6 sm:mb-8 bg-white p-4 rounded-xl border border-neutral-200/80 shadow-2xs">
+                    <div className="px-4 sm:px-6 pb-6 pt-2 border-t border-neutral-100 bg-neutral-50/40">
+                      <div className="mb-6 bg-white p-4 rounded-xl border border-neutral-200/80 shadow-2xs">
                         <span className="font-mono font-bold text-neutral-950 block mb-1 uppercase tracking-wider text-[10px]">Strategic Intent</span>
                         <p className="text-xs sm:text-sm text-neutral-700 leading-relaxed">{path.summary}</p>
                       </div>
-                      <div className="pl-1 sm:pl-2">
+                      <div className="pl-1">
                         {path.stages?.map((stage, sIdx) => (
                           <StageCard key={sIdx} stage={stage} index={sIdx} isLast={sIdx === path.stages.length - 1} />
                         ))}
@@ -201,6 +338,7 @@ export default function CareerTree() {
           );
         })}
       </div>
+
     </div>
   );
 }
