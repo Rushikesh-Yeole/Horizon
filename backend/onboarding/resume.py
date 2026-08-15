@@ -3,10 +3,14 @@ from fastapi import APIRouter, UploadFile, File, HTTPException
 from openai import AsyncOpenAI
 from onboarding.models import Profile
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 resume_router = APIRouter()
 client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
 
+MODEL = os.getenv("MODEL_RESUME_PARSER", os.getenv("OPENROUTER_MODEL", "google/gemini-2.5-flash-lite"))
 MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5 MB
 
 
@@ -33,7 +37,7 @@ async def parse_resume(file: UploadFile = File(...)):
                     text += extracted + "\n"
         
         response = await client.beta.chat.completions.parse(
-            model=os.getenv("OPENROUTER_MODEL", "google/gemini-2.5-flash"),
+            model=MODEL,
             messages=[
                 {"role": "system", "content": "Extract resume data into the exact schema provided. If a field is missing, leave it empty."},
                 {"role": "user", "content": text}

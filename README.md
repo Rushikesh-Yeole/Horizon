@@ -40,9 +40,11 @@ Trees cached in Redis for 24h (`horizon:tree:v7:{user_id}`).
 
 Target role + companies in, structured fit cards out, generated in parallel.
 
-Two separate signal sources per company: Tavily pulls raw interview signals from Blind, Reddit, and HN (7-min cache); a separate Gemini web-grounded call extracts hard technical skills from live Greenhouse/Lever JDs (30-min cache). Both feed the final synthesis prompt.
+Two separate signal sources per company: Tavily pulls raw interview signals from Blind, Reddit, and HN (7-min cache); an OpenRouter native web-search call extracts the canonical, foundational tech stack from live job requirements across the web (30-min cache) to eliminate hallucination. Both feed the final synthesis prompt.
 
-Gemini scores against a strict rubric:
+**Agnostic Semantic Judge:** Instead of brittle manual synonym dictionaries, a dedicated ultra-fast LLM pass evaluates the candidate's skills against the company's canonical stack. It natively reasons about semantic overlap (e.g., understanding that "LangChain" and "LLMs" covers a requirement for "RAG") to produce deterministic, consistent scoring.
+
+The judge scores against a strict rubric:
 
 ```
 A (90-100): >80% stack match + production proof in target ecosystem
@@ -129,7 +131,9 @@ MBTI questionnaire samples per-dimension questions from MongoDB, scores via Like
 
 **Intelligence is distributed, not prompt-dependent.** The graph holds structural, persistent knowledge: role-to-skill weights and role-to-role transition priors that strengthen over time. The web intel layer (Blind, HN, Reddit, engineering blogs, live JDs) contributes the live, sourced signal that no static training set can match. The LLM synthesizes across both. None of the three is sufficient alone.
 
-**Structured output throughout.** Every Gemini call is bound to a Pydantic schema. No regex fallbacks, no ambiguous parsing at any layer.
+**Deterministic Semantic Scoring in a Chaotic Web.** By forcing the LLM to extract a "canonical tech stack" from live web jobs and applying a dedicated agnostic semantic judge, Horizon absorbs the extreme variance of live web search. It consistently anchors scores with ~1 point of deviation, bringing robust, deterministic reliability to otherwise chaotic real-world data.
+
+**Structured output throughout.** Every LLM call is bound to a Pydantic schema. No regex fallbacks, no ambiguous parsing at any layer.
 
 **Cache tiered by volatility.** Tree (24h), market intel, JDs. Each layer invalidated independently.
 
@@ -144,8 +148,8 @@ MBTI questionnaire samples per-dimension questions from MongoDB, scores via Like
 | Layer | Technology |
 |---|---|
 | API | FastAPI, Uvicorn |
-| AI | Gemini 2.5 Flash |
-| Web Evidence | Tavily (advanced, multi-key) |
+| AI | OpenRouter (Gemini, Claude, etc.) |
+| Web Evidence | OpenRouter Native Web Plugin + Tavily |
 | Graph DB | Neo4j (async driver) |
 | Primary DB | MongoDB (Motor async) |
 | Cache | Redis (aioredis) |

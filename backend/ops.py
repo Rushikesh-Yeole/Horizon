@@ -19,12 +19,7 @@ users_col = _mongo["users_db"]["profiles"]
 
 current_request_cost = contextvars.ContextVar("current_request_cost", default=None)
 
-_PRICING = {
-    "google/gemini-3.5-flash-lite": (0.05, 0.20),
-    "google/gemini-2.5-flash-lite-preview": (0.05, 0.20),
-    "google/gemini-2.5-flash":      (0.30, 2.50),
-    "google/gemini-2.5-pro":        (1.25, 10.00),
-}
+_PRICING: dict = {}
 
 
 async def issue_token(user_id: str) -> dict:
@@ -45,21 +40,23 @@ async def verify_token(token: str) -> Optional[str]:
         return None
 
 
-async def get_latest_pricing(redis_client):
+async def get_latest_pricing(redis_client=None):
+    """Fetch live pricing from Redis or OpenRouter and maintain in-memory index."""
     import json
-    today = datetime.datetime.utcnow().strftime("%Y-%m-%d")
-    key = f"horizon:pricing:{today}"
+    key = "horizon:pricing:latest"
+
     if redis_client:
-        cached = await redis_client.get(key)
-        if cached:
-            try:
-                _PRICING.update(json.loads(cached))
+        try:
+            cached = await redis_client.get(key)
+            if cached:
+                raw_dict = json.loads(cached)
+                _PRICING.update({k: tuple(v) for k, v in raw_dict.items()})
                 return
-            except Exception as e:
-                print(f"[cost] cache read failed: {e}")
-                
+        except Exception as e:
+            print(f"[cost] redis cache read failed: {e}")
+
     try:
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.get("https://openrouter.ai/api/v1/models")
             resp.raise_for_status()
             data = resp.json()
@@ -70,12 +67,14 @@ async def get_latest_pricing(redis_client):
                 prompt_price = float(pricing.get("prompt", 0)) * 1_000_000
                 completion_price = float(pricing.get("completion", 0)) * 1_000_000
                 new_pricing[m_id] = (prompt_price, completion_price)
-            
+
             _PRICING.update(new_pricing)
+
+            # Store in Redis (24-hour TTL)
             if redis_client:
-                await redis_client.setex(key, 86400, json.dumps(new_pricing))
+                await redis_client.setex(key, 86400, json.dumps({k: list(v) for k, v in new_pricing.items()}))
     except Exception as e:
-        print(f"[cost] failed to fetch pricing: {e}")
+        print(f"[cost] live pricing fetch failed: {e}")
 
 
 def log_llm_cost(op: str, model: str, response):
@@ -84,7 +83,17 @@ def log_llm_cost(op: str, model: str, response):
         if not u:
             print(f"[cost] {op} | {model} | in=0 out=0 | ₹0.0000")
             return 0
-        in_rate, out_rate = _PRICING.get(model, (0.30, 2.50))
+
+        rates = _PRICING.get(model)
+        if rates is None:
+            # Check without provider prefix or exact match
+            rates = next((v for k, v in _PRICING.items() if k.endswith(model) or model.endswith(k)), None)
+
+        if rates is None:
+            print(f"[cost] {op} | {model} (unindexed model) | in={u.prompt_tokens} out={u.completion_tokens} | ₹0.0000")
+            return 0
+
+        in_rate, out_rate = rates
         cost = ((u.prompt_tokens / 1_000_000) * in_rate +
                 (u.completion_tokens / 1_000_000) * out_rate) * 90
         print(f"[cost] {op} | {model} | in={u.prompt_tokens} out={u.completion_tokens} | ₹{cost:.4f}")

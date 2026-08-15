@@ -7,7 +7,6 @@ neo4j
 redis
 tavily-python
 openai
-google-genai
 python-dotenv
 bcrypt
 PyJWT
@@ -15,6 +14,5 @@ python-multipart
 rapidfuzz
 sentence-transformers
 faiss-cpu
-pymupdf4llm
-PyMuPDF
+
 pdfplumber

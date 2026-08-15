@@ -18,7 +18,8 @@ log = logging.getLogger("tree")
 
 _client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
 _tavily = TavilyClient(api_key=os.getenv("TAVILY_API_KEY", "").split(",")[0])
-MODEL = os.getenv("OPENROUTER_MODEL", "google/gemini-2.5-flash")
+MODEL_TREE_ARCHETYPES = os.getenv("MODEL_TREE_ARCHETYPES", os.getenv("OPENROUTER_MODEL", "google/gemini-2.5-flash-lite"))
+MODEL_TREE_SYNTHESIZER = os.getenv("MODEL_TREE_SYNTHESIZER", os.getenv("OPENROUTER_MODEL", "google/gemini-2.5-flash"))
 CACHE_TTL = 86400
 
 BIO_DOMAINS = [
@@ -109,7 +110,7 @@ Return ONLY a JSON array of 3 Tavily search queries targeting real career storie
 ["Staff Engineer at fintech career path reddit", "ML infrastructure founder journey indiehackers", "Engineering Manager FAANG teamblind"]"""
 
     resp = await _client.chat.completions.create(
-        model=MODEL,
+        model=MODEL_TREE_ARCHETYPES,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.4,
     )
@@ -215,7 +216,7 @@ Rules for observed_paths:
 Return valid JSON matching the CareerTree schema exactly."""
 
     resp = await _client.chat.completions.create(
-        model=MODEL,
+        model=MODEL_TREE_SYNTHESIZER,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.1,
         response_format={

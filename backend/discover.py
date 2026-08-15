@@ -26,11 +26,11 @@ try:
 except Exception as e:
     tavily_client = None
     log.warning(f"Failed to init Tavily: {e}")
-logging.getLogger("google_genai.models").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 _client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
-MODEL = os.getenv("OPENROUTER_MODEL", "google/gemini-2.5-flash")
+MODEL_JD_EXTRACTOR = os.getenv("MODEL_JD_EXTRACTOR", os.getenv("OPENROUTER_MODEL", "google/gemini-2.5-flash-lite"))
+MODEL_DISCOVER_ADVISOR = os.getenv("MODEL_DISCOVER_ADVISOR", os.getenv("OPENROUTER_MODEL", "google/gemini-2.5-flash"))
 JD_TTL = 30 * 60
 
 SYSTEM = (
@@ -41,16 +41,15 @@ SYSTEM = (
 
 
 
+
 class AdvisoryCard(BaseModel):
     company_name: str
-    reasoning_trace: str = Field(..., description="Max 30 words. Step-by-step scoring & tiering logic. (Ex: Base tier C -> Amazon internship modifier applied -> Final tier B)")
+    reasoning_trace: str = Field(..., description="Max 30 words. Explain the fit tier given the pre-computed score and candidate background. (Ex: Score 83 -> Tier B: strong AI stack, TypeScript gap bridgeable.)")
     hiring_bar_difficulty: Literal["Forgiving", "Standard", "High", "Elite"]
-    core_pillars_required: List[str] = Field(..., description="3-5 non-negotiable hard skills from JD.")
-    user_skill_gaps: List[str] = Field(..., description="Top 10 important JD skills strictly absent from user stack.")
-    feasibility_timeline_weeks: int
+    feasibility_timeline_weeks: int = Field(..., description="Realistic weeks to close the stated skill gaps, based on their complexity and the candidate's existing foundation. 0 if no gaps.")
     verdict_headline: str = Field(..., description="Max 10 words. Brutally honest, no spin.")
-    actionable_path: List[str] = Field(..., description="3-4 concrete VERB-first steps with named tech/platforms.")
-    main_advisory_text: str = Field(..., description="Max 25 words. What actually moves the needle.")
+    actionable_path: List[str] = Field(..., description="3-4 concrete VERB-first steps targeting the stated gaps with named tech/platforms.")
+    main_advisory_text: str = Field(..., description="Max 25 words. What actually moves the needle at this specific company.")
     jd_source_url: Optional[str] = Field(None, description="The exact URL where the JD was sourced from.")
 
 
@@ -91,29 +90,11 @@ async def _fetch_jd(rc, role: str, company: str, location: str) -> Tuple[str, Li
             except Exception:
                 return cached, [], True
 
-    context = "No search results found."
-    if tavily_client:
-        try:
-            search_res = tavily_client.search(
-                f"latest '{company}' '{role}' '{location}' job description requirements (active OR archived OR greenhouse OR lever)",
-                search_depth="advanced"
-            )
-            snippets = [
-                f"URL: {r.get('url')}\nContent: {r.get('content')}" 
-                for r in search_res.get("results", [])
-            ]
-            if snippets:
-                context = "\n\n".join(snippets)
-        except Exception as e:
-            log.warning(f"Tavily search failed for JD [{company}]: {e}")
-
     prompt = (
-        f"Find the requirements for '{role}' at '{company}', {location} from the SEARCH RESULTS.\n"
-        f"Priority 1: Extract from a currently ACTIVE job posting if available.\n"
-        f"Priority 2: If no active posting exists, extract from the most RECENT CLOSED/ARCHIVED posting for this exact role to determine the historical engineering bar.\n"
-        f"Extract must-have technical skills only — no soft skills, no vague requirements.\n\n"
-        f"SEARCH RESULTS:\n{context}\n\n"
-        'Return ONLY valid JSON: {"skills": ["skill1", "skill2"], "resp": "one-line bar summary", "source_url": "https://..."}'
+        f"Search the web for the canonical tech stack and job requirements for a '{role}' at '{company}'.\n"
+        f"Synthesize the results to extract an exhaustive, deduplicated list of their core, non-negotiable technical requirements.\n"
+        f"IMPORTANT: Extract atomic skill names only (e.g. 'PyTorch', 'React', 'Kubernetes', 'Go') — no vague terms like 'software engineering' or 'problem solving'.\n\n"
+        'Return ONLY valid JSON: {"skills": ["skill1", "skill2"], "resp": "one-line bar summary", "source_url": "url_found"}'
     )
 
     jd_text = json.dumps({"skills": [], "resp": "JD unavailable.", "source_url": ""})
@@ -121,11 +102,12 @@ async def _fetch_jd(rc, role: str, company: str, location: str) -> Tuple[str, Li
 
     try:
         resp = await _client.chat.completions.create(
-            model=MODEL,
+            model=MODEL_JD_EXTRACTOR,
             messages=[{"role": "user", "content": prompt}],
-            temperature=0.0
+            temperature=0.0,
+            extra_body={"plugins": [{"id": "web"}]}
         )
-        log_llm_cost("fetch_jd", MODEL, resp)
+        log_llm_cost("fetch_jd", MODEL_JD_EXTRACTOR, resp)
         if resp and getattr(resp, "choices", None) and len(resp.choices) > 0 and resp.choices[0].message.content:
             jd_text = resp.choices[0].message.content.strip()
             clean_text = jd_text
@@ -165,35 +147,58 @@ async def _build_card(
         for x in raw_projects
     ]
     experience = list(set(
-        (p.get("experience") or []) + 
+        (p.get("experience") or []) +
         (r.get("experience") or [])
     ))
     if not experience:
         experience = ["None"]
 
+    # ─ Deterministic scoring ─ runs before the LLM call ──────────────────────
+    coverage = await compute_coverage_score(user_skills, jd_skills)
+    fit_score = coverage["evidence_coverage_score"]
+    skill_gaps = coverage["missing"]        # taxonomy-aware, not string match
+    core_pillars = jd_skills[:5]            # top skills extracted from JD
+    tier = (
+        "A" if fit_score >= 90 else
+        "B" if fit_score >= 75 else
+        "C" if fit_score >= 60 else "D"
+    )
+
     prompt = f"""COMPANY: {company} ({location}) | ROLE: {role}
 
-JD SIGNALS: {jd_text}
-INSIDER DATA: {signals or 'none'}
-CANDIDATE STACK: {user_skills}
-CANDIDATE PROJECTS: {projects}
-EXPERIENCE: {experience}
+PRE-COMPUTED FACTS (ground truth — do not re-derive):
+  Fit Score : {fit_score}/100  →  Tier {tier}
+  Skill Gaps: {skill_gaps if skill_gaps else 'None — candidate covers all core pillars'}
+  Core Pillars Required: {core_pillars}
 
-Scoring Tiers:
-  A (90-100): >80% stack match + production proof in target ecosystem
-  B (75-89): >50% match, bridgeable via sibling tech (React→Vue, Java→Kotlin)
-  C (60-74): <50% match, paradigm shift required, 3+ month ramp
-  D (<60): core engineering pillars missing
-Modifiers: FAANG/unicorn exp → +5pts | level mismatch → hard cap 20 | ecosystem lock-in → hard cap 30
+Scoring tiers for context:
+  A (90-100): >80% stack match + production proof in ecosystem
+  B (75-89):  >50% match, bridgeable via sibling tech
+  C (60-74):  <50% match, 3+ month paradigm shift
+  D (<60):    core engineering pillars missing
+Modifiers: FAANG/unicorn exp → +5pts | level mismatch → cap 20 | ecosystem lock-in → cap 30
 
-Gap list: Only Top 10 important skills only from JD, that are strictly absent from candidate stack — zero false positives.
-Verdict: state the reality in ≤10 words, no spin, no encouragement.
-Actionable path: name actual technologies, platforms, or specific project types — no vague steps.
-Advisory: what single thing most changes this person's odds at this company right now."""
+CANDIDATE CONTEXT:
+  Stack: {user_skills}
+  Projects: {projects or ['None']}
+  Experience: {experience}
+
+INSIDER DATA (Blind/HN/Reddit signals):
+  {signals or 'none'}
+
+JD SUMMARY: {jd_text}
+
+Generate the qualitative advisory only. Do NOT re-compute the score or gaps.
+- reasoning_trace: explain WHY Tier {tier} / score {fit_score} given this candidate's background vs the role bar.
+- hiring_bar_difficulty: infer from insider signals how selective this company is.
+- feasibility_timeline_weeks: realistic weeks to close {len(skill_gaps)} gap(s) given the candidate's existing foundation.
+- verdict_headline: ≤10 words, brutal, no spin.
+- actionable_path: 3-4 VERB-first steps to close the gaps. Name exact tech.
+- main_advisory_text: ≤25 words. Highest-signal thing for THIS company."""
 
     try:
         resp = await _client.chat.completions.create(
-            model=MODEL,
+            model=MODEL_DISCOVER_ADVISOR,
             messages=[
                 {"role": "system", "content": SYSTEM},
                 {"role": "user", "content": prompt}
@@ -209,19 +214,17 @@ Advisory: what single thing most changes this person's odds at this company righ
             temperature=0.0,
             seed=42,
         )
-        log_llm_cost("build_card", MODEL, resp)
+        log_llm_cost("build_card", MODEL_DISCOVER_ADVISOR, resp)
         card = json.loads(resp.choices[0].message.content)
-        # Inject deterministic coverage score (never from LLM)
-        p = user_profile.get("profile", {})
-        r = user_profile.get("resume", {}).get("parsed_data", {})
-        user_skills = list(set((p.get("skills") or []) + (r.get("skills") or [])))
-        coverage = compute_coverage_score(user_skills, jd_skills)
-        card["fit_score"] = coverage["evidence_coverage_score"]
+        # Overwrite with deterministic values — LLM must not alter these
+        card["fit_score"] = fit_score
         card["coverage_pct"] = coverage["coverage_pct"]
+        card["user_skill_gaps"] = skill_gaps
+        card["core_pillars_required"] = core_pillars
         return card, role, fresh_skills
     except Exception as e:
         log.error(f"Card failed [{company}]: {e}")
-        return {"company_name": company, "fit_score": 0, "verdict_headline": "Analysis failed.", "error": str(e), "reasoning_trace": "", "hiring_bar_difficulty": "Standard", "core_pillars_required": [], "user_skill_gaps": [], "feasibility_timeline_weeks": 0, "actionable_path": [], "main_advisory_text": ""}, role, []
+        return {"company_name": company, "fit_score": fit_score, "coverage_pct": coverage["coverage_pct"], "user_skill_gaps": skill_gaps, "core_pillars_required": core_pillars, "verdict_headline": "Analysis failed.", "error": str(e), "reasoning_trace": "", "hiring_bar_difficulty": "High", "feasibility_timeline_weeks": 0, "actionable_path": [], "main_advisory_text": ""}, role, []
 
 
 async def generate_cards(
@@ -233,7 +236,7 @@ async def generate_cards(
     """Parallel advisory card generation. Evolves graph only on fresh JD fetches."""
     role = criteria.get("role", "Software Engineer")
     location = criteria.get("location", "Global")
-    companies = criteria.get("target_companies", [])[:3]
+    companies = criteria.get("target_companies", [])[:4]
 
     clean_data = await asyncio.gather(*[_spell_check(role, c, location) for c in companies])
     if clean_data:

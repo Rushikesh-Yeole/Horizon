@@ -50,6 +50,10 @@ async def lifespan(app: FastAPI):
     global _redis
     log.info("Starting up...")
     _redis = aioredis.from_url(os.getenv("REDIS_URL"), encoding="utf-8", decode_responses=True)
+    try:
+        await ops.get_latest_pricing(_redis)
+    except Exception as e:
+        log.warning(f"Failed to fetch initial OpenRouter pricing: {e}")
     await graph.setup()
     yield
     await graph.close()
