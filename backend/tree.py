@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 from tavily import TavilyClient
 
 import neo_graph as graph
+import ops
 
 load_dotenv()
 log = logging.getLogger("tree")
@@ -20,7 +21,7 @@ _client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv
 _tavily = TavilyClient(api_key=os.getenv("TAVILY_API_KEY", "").split(",")[0])
 MODEL_TREE_ARCHETYPES = os.getenv("MODEL_TREE_ARCHETYPES", os.getenv("OPENROUTER_MODEL", "google/gemini-2.5-flash-lite"))
 MODEL_TREE_SYNTHESIZER = os.getenv("MODEL_TREE_SYNTHESIZER", os.getenv("OPENROUTER_MODEL", "google/gemini-2.5-flash"))
-CACHE_TTL = 86400
+CACHE_TTL = int(os.getenv("CACHE_TTL_TREE", str(7 * 86400)))  # Default: 7 days
 
 BIO_DOMAINS = [
     "reddit.com", "news.ycombinator.com", "teamblind.com", "indiehackers.com",
@@ -106,19 +107,37 @@ Rules:
 - Be opinionated — match paths to the actual skill signal, not generic mappings
 - No tech stack names in archetype titles
 
-Return ONLY a JSON array of 3 Tavily search queries targeting real career stories and biographies:
+Return ONLY a JSON array of 3 Tavily search queries targeting real career stories and biographies. Do NOT return JSON objects. Example format:
 ["Staff Engineer at fintech career path reddit", "ML infrastructure founder journey indiehackers", "Engineering Manager FAANG teamblind"]"""
 
     resp = await _client.chat.completions.create(
         model=MODEL_TREE_ARCHETYPES,
         messages=[{"role": "user", "content": prompt}],
         temperature=0.4,
+        response_format={
+            "type": "json_schema",
+            "json_schema": {
+                "name": "ArchetypeQueries",
+                "strict": True,
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "queries": {
+                            "type": "array",
+                            "items": {"type": "string"}
+                        }
+                    },
+                    "required": ["queries"],
+                    "additionalProperties": False
+                }
+            }
+        }
     )
+    ops.log_llm_cost("tree_archetypes", MODEL_TREE_ARCHETYPES, resp)
     text = resp.choices[0].message.content.strip()
-    if "```" in text:
-        text = text.split("```")[1].replace("json", "").replace("python", "").strip()
     try:
-        return json.loads(text)
+        data = json.loads(text)
+        return data.get("queries", [f"senior software engineer career path {skills[:2]}"] * 3)
     except Exception:
         return [f"senior software engineer career path {skills[:2]}"] * 3
 
@@ -228,38 +247,72 @@ Return valid JSON matching the CareerTree schema exactly."""
             }
         },
     )
+    ops.log_llm_cost("tree_synthesizer", MODEL_TREE_SYNTHESIZER, resp)
     log.info("Synthesis done.")
-    return json.loads(resp.choices[0].message.content)
+    try:
+        return json.loads(resp.choices[0].message.content)
+    except Exception as e:
+        log.error(f"Failed to parse JSON: {e}. Raw content: {resp.choices[0].message.content[:500]}")
+        return {"paths": [], "observed_paths": []}
 
 
 def _resolve_citations(tree: Dict[str, Any], url_map: Dict[str, str]) -> int:
+    import re
     count = 0
+    # Normalize url_map keys for case-insensitive lookup
+    norm_map = {k.strip("[] ").upper(): v for k, v in url_map.items()}
+
     for path in tree.get("paths", []):
         for stage in path.get("stages", []):
             resolved = []
-            for ref in stage.get("citations", []):
-                clean = ref.strip("[] ")
-                if clean in url_map:
-                    resolved.append(url_map[clean])
+            raw_citations = stage.get("citations", [])
+            for ref in raw_citations:
+                if not isinstance(ref, str):
+                    continue
+                # 1. Bare direct URLs
+                if ref.startswith("http://") or ref.startswith("https://"):
+                    if ref not in resolved:
+                        resolved.append(ref)
+                        count += 1
+                    continue
+
+                # 2. Exact match in normalized map
+                clean = ref.strip("[] ").upper()
+                if clean in norm_map and norm_map[clean] not in resolved:
+                    resolved.append(norm_map[clean])
                     count += 1
-                elif ref.startswith("http"):
-                    # Only allow bare URLs that are genuine links, not SOURCE_REF tags
-                    resolved.append(ref)
-                # SOURCE_REF_X with no mapping is silently dropped
+                    continue
+
+                # 3. Regex extraction for SOURCE_REF_<id> within text (e.g. "[SOURCE_REF_1]", "SOURCE_REF_1 (Blind)")
+                matched = re.findall(r'SOURCE_REF_(\d+)', ref, re.IGNORECASE)
+                for num in matched:
+                    key = f"SOURCE_REF_{num}"
+                    if key in norm_map and norm_map[key] not in resolved:
+                        resolved.append(norm_map[key])
+                        count += 1
+
+            # 4. Fallback: if model provided no valid tags but evidence was fetched, attach top sources
+            if not resolved and norm_map:
+                fallback_urls = list(norm_map.values())[:2]
+                for f_url in fallback_urls:
+                    if f_url not in resolved:
+                        resolved.append(f_url)
+                        count += 1
+
             stage["citations"] = resolved
     return count
 
 
 # ── Entry Point ───────────────────────────────────────────────────────────────
 
-async def generate_tree(user_id: str, user_doc: Dict[str, Any], redis_client) -> Dict[str, Any]:
+async def generate_tree(user_id: str, user_doc: Dict[str, Any], redis_client, force_refresh: bool = False) -> Dict[str, Any]:
     """
     Full pipeline: graph trajectories → evidence → synthesis → citation resolution → graph learning.
     Each run feeds observed career paths back into the graph, making future traversals smarter.
     """
-    cache_key = f"horizon:tree:v7:{user_id}"
+    cache_key = f"horizon:tree:v8:{user_id}"
 
-    if redis_client:
+    if redis_client and not force_refresh:
         cached = await redis_client.get(cache_key)
         if cached:
             log.info("Returning cached tree.")
@@ -293,6 +346,13 @@ async def generate_tree(user_id: str, user_doc: Dict[str, Any], redis_client) ->
         log.info(f"Graph learned {len(observed)} new career tracks from this synthesis.")
 
     tree["generated_at"] = datetime.datetime.utcnow().isoformat()
+    tree["graph_metrics"] = {
+        "trajectories_explored": len(known_trajectories),
+        "evidence_sources_ingested": len(url_map),
+        "citations_resolved": resolved,
+        "learned_paths_count": len(observed),
+        "traversal_source": "Neo4j Graph Traversal" if known_trajectories else "Dynamic Discovery"
+    }
 
     if redis_client:
         await redis_client.setex(cache_key, CACHE_TTL, json.dumps(tree))

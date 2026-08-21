@@ -23,16 +23,25 @@ def _get_driver():
 
 async def setup():
     """Run on startup — creates uniqueness constraints."""
-    async with _get_driver().session() as s:
-        await s.run("CREATE CONSTRAINT IF NOT EXISTS FOR (r:Role) REQUIRE r.name IS UNIQUE")
-        await s.run("CREATE CONSTRAINT IF NOT EXISTS FOR (s:Skill) REQUIRE s.name IS UNIQUE")
-        await s.run("CREATE INDEX transitions_count IF NOT EXISTS FOR ()-[t:TRANSITIONS_TO]-() ON (t.count)")
-    log.info("Graph constraints ready.")
+    try:
+        async with _get_driver().session() as s:
+            await s.run("CREATE CONSTRAINT IF NOT EXISTS FOR (r:Role) REQUIRE r.name IS UNIQUE")
+            await s.run("CREATE CONSTRAINT IF NOT EXISTS FOR (s:Skill) REQUIRE s.name IS UNIQUE")
+            await s.run("CREATE INDEX transitions_count IF NOT EXISTS FOR ()-[t:TRANSITIONS_TO]-() ON (t.count)")
+        log.info("Graph constraints ready.")
+    except Exception as e:
+        log.warning(f"Neo4j graph setup failed (operating in fallback mode): {e}")
 
 
 async def close():
+    global _driver
     if _driver is not None:
-        await _driver.close()
+        try:
+            await _driver.close()
+        except Exception as e:
+            log.warning(f"Neo4j driver close error: {e}")
+        finally:
+            _driver = None
 
 
 async def evolve(role: str, skills: List[str]):

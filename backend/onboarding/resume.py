@@ -45,6 +45,9 @@ async def parse_resume(file: UploadFile = File(...)):
             response_format=Profile
         )
         
+        import ops
+        ops.log_llm_cost("parse_resume", MODEL, response)
+        
         return response.choices[0].message.parsed.model_dump()
     except HTTPException:
         raise

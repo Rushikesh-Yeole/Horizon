@@ -40,7 +40,7 @@ logging.getLogger("neo4j.notifications").setLevel(logging.ERROR)
 log = logging.getLogger("main")
 
 TAVILY_KEYS = [k.strip() for k in (os.getenv("TAVILY_API_KEYS") or os.getenv("TAVILY_API_KEY", "")).split(",") if k.strip()]
-INTEL_CACHE_TTL = 7 * 60
+INTEL_CACHE_TTL = int(os.getenv("CACHE_TTL_INTEL", str(7 * 60)))  # Default: 7 mins
 
 _redis: aioredis.Redis = None
 
@@ -54,10 +54,17 @@ async def lifespan(app: FastAPI):
         await ops.get_latest_pricing(_redis)
     except Exception as e:
         log.warning(f"Failed to fetch initial OpenRouter pricing: {e}")
-    await graph.setup()
+    try:
+        await graph.setup()
+    except Exception as e:
+        log.warning(f"Graph setup warning: {e}")
     yield
-    await graph.close()
-    await _redis.aclose()
+    try:
+        await graph.close()
+    except Exception as e:
+        log.warning(f"Graph close warning: {e}")
+    if _redis:
+        await _redis.aclose()
     log.info("Shutdown complete.")
 
 
@@ -431,11 +438,20 @@ class DiscoverRequest(BaseModel):
 
 @app.post("/discover/search")
 async def discover_search(
-    request: DiscoverRequest, 
+    request: DiscoverRequest,
+    req: Request,
     rc: aioredis.Redis = Depends(get_redis),
     user_id: str = Depends(get_current_user),
     force_refresh: bool = False,
 ):
+    session_id = req.headers.get("x-demo-session-id", user_id)
+    rate_key = f"rate_limit:discover:{session_id}"
+    current_calls = await rc.incr(rate_key)
+    if current_calls == 1:
+        await rc.expire(rate_key, 60)
+    elif current_calls > 5:
+        raise HTTPException(429, "Rate limit exceeded. Please wait a minute before searching again.")
+
     import time
     start_time = time.time()
     
@@ -458,24 +474,47 @@ async def discover_search(
 
 @app.get("/career/tree")
 async def get_career_tree(
+    req: Request,
+    force: bool = False,
     rc: aioredis.Redis = Depends(get_redis),
     user_id: str = Depends(get_current_user),
 ):
     import time
     start_time = time.time()
+
+    # 1. Fast path: check Redis cache first (no rate limit on cache hits)
+    cache_key = f"horizon:tree:v8:{user_id}"
+    if rc and not force:
+        cached = await rc.get(cache_key)
+        if cached:
+            log.info(f"[/career/tree] Cache hit for {user_id}")
+            result = json.loads(cached)
+            result["latency_ms"] = (time.time() - start_time) * 1000
+            return result
+
+    # 2. Rate limit only applies to expensive fresh tree generation / recalibrations
+    session_id = req.headers.get("x-demo-session-id", user_id)
+    rate_key = f"rate_limit:tree:gen:{session_id}"
     
+    if rc:
+        current_calls = await rc.incr(rate_key)
+        if current_calls == 1:
+            await rc.expire(rate_key, 180)
+        elif current_calls > 2:  # allow 2 attempts per 3 minutes to handle retries/double mounts
+            raise HTTPException(429, "Rate limit exceeded. Career tree generation requires heavy compute. Please wait 3 minutes before recalibrating.")
+
     user_doc = await ops.users_col.find_one({"id": user_id})
     if not user_doc:
         raise HTTPException(404, "User not found.")
     user_doc.pop("_id", None)
 
-    result = await generate_tree(user_id, user_doc, rc)
+    result = await generate_tree(user_id, user_doc, rc, force_refresh=force)
     if result.get("status") == "error":
         raise HTTPException(500, result.get("message"))
         
     latency_ms = (time.time() - start_time) * 1000
     result["latency_ms"] = latency_ms
-    log.info(f"[/career/tree] Completed in {latency_ms:.2f}ms")
+    log.info(f"[/career/tree] Completed in {latency_ms:.2f}ms (force={force})")
     
     return result
 

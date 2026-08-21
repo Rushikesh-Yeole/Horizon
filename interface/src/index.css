@@ -1,3 +1,13 @@
+/* Self-hosted Geist font — exact same binary as Vercel CDN. Eliminates
+   layout drift between localhost (cached/system font) and deployed origin. */
+@font-face {
+  font-family: 'Geist';
+  src: url('/fonts/Geist-Variable.woff2') format('woff2-variations');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -5,9 +15,11 @@
 @layer base {
   html {
     scroll-behavior: smooth;
-    font-size: 16px;
-    -ms-overflow-style: none;  /* IE and Edge */
-    scrollbar-width: none;  /* Firefox */
+    font-size: 15.25px;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 
   /* Hide scrollbar for Chrome, Safari and Opera */
@@ -16,20 +28,37 @@
   }
 
   body {
-    @apply bg-white text-neutral-900 font-sans antialiased selection:bg-neutral-900 selection:text-white;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    letter-spacing: -0.011em;
+    @apply bg-white text-neutral-950 font-sans antialiased selection:bg-neutral-950 selection:text-white;
+    font-family: 'Geist', 'Plus Jakarta Sans', 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    letter-spacing: -0.005em;
+    word-spacing: 0.02em;
     line-height: 1.6;
+    overflow-x: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
 
-  h1, h2, h3, h4 {
-    letter-spacing: -0.028em;
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Geist', 'Plus Jakarta Sans', 'Inter', sans-serif;
+    letter-spacing: -0.012em;
+    word-spacing: 0.04em;
+    @apply text-neutral-950 font-bold;
+  }
+
+  code, pre, kbd {
+    font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+    letter-spacing: -0.005em;
   }
 }
 
 /* Minimal Card & Hairline Utility */
 .glass-panel {
   @apply bg-white border border-neutral-200/90 rounded-2xl transition-all;
+}
+
+/* Code micro-pill */
+.code-pill {
+  @apply px-1.5 py-0.5 rounded bg-neutral-100 border border-neutral-200/80 text-neutral-950 font-mono text-xs font-semibold;
 }

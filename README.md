@@ -2,7 +2,9 @@
 
 **Career intelligence platform. Not a job board. Not a chatbot.**
 
-**[Live demo](https://horizon-six-beryl.vercel.app/)**
+**[Live Demo](https://horizon-six-beryl.vercel.app/)**
+- **Interactive Sandbox:** Instant one-click guest access without requiring API keys or resume uploads.
+- **Metered Compute & Caching:** Real-time credit metering per Discovery / Tree run with multi-tier Redis caching to showcase deterministic scaling and cost observability.
 
 Horizon builds career roadmaps grounded in real job descriptions, real interview signals, and a graph that gets sharper with every request. The system's prior knowledge compounds across users & each run makes the next one better.
 
@@ -103,25 +105,25 @@ MBTI questionnaire samples per-dimension questions from MongoDB, scores via Like
               |   tree.py         |      |  discover.py        |
               +------+------------+      +----------+----------+
                      |                             |
-         +-----------v-----------------------------v----------+
+         +-----------v-----------------------------v---------+
          |                   neo_graph.py                    |
          |  Neo4j | REQUIRES edges | TRANSITIONS_TO edges    |
          |  Graph-first retrieval | Continuous evolution     |
-         +-----------------------------------------------------------+
+         +---------------------------------------------------+
                      |                             |
          +-----------v------+      +--------------v---------+
          |  Tavily Search   |      |   Gemini 2.5 Flash     |
-         |  (multi-key)     |      |   (structured output)  |
+         |                  |      |   (structured output)  |
          +------------------+      +------------------------+
                      |
          +-----------v-------------------------------------------+
          |               Redis (aioredis)                        |
-         |   Tree 24h  |  Intel 7min  |  JD 30min               |
+         |   Tree 24h  |  Intel 7min  |  JD 30min                |
          +-------------------------------------------------------+
                      |
          +-----------v-------------------------------------------+
          |             MongoDB (Motor async)                     |
-         |       User profiles  |  MBTI questions               |
+         |       User profiles  |  MBTI questions                |
          +-------------------------------------------------------+
 ```
 

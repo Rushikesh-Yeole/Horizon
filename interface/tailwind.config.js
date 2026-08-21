@@ -9,6 +9,10 @@ export default {
         secondary: "#86868b", // Apple Gray
         surface: "#f5f5f7",   // Apple Off-white
       },
+      fontFamily: {
+        sans: ['"Geist"', '"Plus Jakarta Sans"', '"Inter"', '-apple-system', 'BlinkMacSystemFont', 'system-ui', 'sans-serif'],
+        mono: ['"JetBrains Mono"', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+      },
       animation: {
         'fade-in': 'fadeIn 0.5s ease-out',
       },

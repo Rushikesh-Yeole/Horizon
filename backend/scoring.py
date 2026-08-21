@@ -39,11 +39,12 @@ async def compute_coverage_score(
         f"CANDIDATE SKILLS:\n{json.dumps(user_skills)}\n\n"
         f"REQUIRED JD SKILLS:\n{json.dumps(jd_skills)}\n\n"
         f"INSTRUCTIONS:\n"
-        f"1. A candidate 'has' a JD skill if they possess it directly OR if they possess a skill that semantically covers it (e.g., 'React' covers 'Frontend', 'LangChain' covers 'RAG', 'C++' covers 'Systems Programming').\n"
-        f"2. Return ONLY the JD skills that are definitively MISSING from the candidate's profile.\n"
-        f"3. Return the exact string names of the missing skills as they appeared in the REQUIRED JD SKILLS list.\n"
-        f"4. If no skills are missing, return an empty array.\n\n"
-        'Return ONLY valid JSON: {"missing": ["skill1", "skill2"]}'
+        f"1. A candidate 'has' a JD skill if they possess it exactly OR if they possess a skill that semantically covers it or is a superset/subset of it (e.g., 'React' covers 'Frontend', 'PyTorch' covers 'Machine Learning Frameworks', 'CUDA' covers 'GPU Systems', 'vLLM' covers 'LLMs').\n"
+        f"2. Think step-by-step about each JD skill and whether any Candidate Skill maps to it. Be generous with semantic overlaps for a senior engineer.\n"
+        f"3. Return ONLY the JD skills that are definitively MISSING from the candidate's profile.\n"
+        f"4. Return the exact string names of the missing skills as they appeared in the REQUIRED JD SKILLS list.\n\n"
+        'Return ONLY valid JSON with two keys: "reasoning" (string explaining mappings) and "missing" (array of exact strings).\n'
+        'Example: {"reasoning": "PyTorch covers ML Frameworks. No web dev skills found to cover Frontend.", "missing": ["Frontend"]}'
     )
 
     missing = jd_skills.copy()  # Fallback to 0% coverage if LLM fails
@@ -53,6 +54,8 @@ async def compute_coverage_score(
             messages=[{"role": "user", "content": prompt}],
             temperature=0.0
         )
+        import ops
+        ops.log_llm_cost("score_coverage", MODEL, resp)
         if resp and getattr(resp, "choices", None) and len(resp.choices) > 0 and resp.choices[0].message.content:
             content = resp.choices[0].message.content.strip()
             if "```" in content:

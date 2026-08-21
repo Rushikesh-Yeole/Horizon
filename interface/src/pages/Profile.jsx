@@ -97,8 +97,8 @@ export default function Profile() {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-white pt-28 pb-20 px-6 max-w-4xl mx-auto flex items-center justify-center">
-        <div className="flex items-center gap-3 text-neutral-500 font-mono text-sm">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+        <div className="flex items-center gap-3 text-neutral-800 font-mono font-bold text-base">
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping" />
           Loading Profile Engine...
         </div>
       </div>
@@ -127,10 +127,10 @@ export default function Profile() {
                 {name || 'Alex Chen'}
               </h1>
             </div>
-            <p className="text-xs font-mono text-neutral-500 mt-1 flex items-center gap-2">
+            <p className="text-xs sm:text-sm font-mono text-neutral-600 mt-1 flex items-center gap-2">
               <span>{user?.email}</span>
               <span>•</span>
-              <span className="text-neutral-800 font-semibold">{role || 'AI Engineer'}</span>
+              <span className="text-neutral-900 font-bold">{role || 'AI Systems Engineer'}</span>
             </p>
           </div>
         </div>
@@ -138,13 +138,13 @@ export default function Profile() {
         <button
           onClick={handleSave}
           disabled={updateProfileMutation.isPending}
-          className="px-6 py-2.5 rounded-full bg-neutral-950 text-white font-semibold text-xs hover:bg-neutral-800 transition-all shadow-sm disabled:opacity-50 flex items-center justify-center gap-2 self-start sm:self-auto shrink-0 cursor-pointer"
+          className="px-6 py-2.5 rounded-full bg-neutral-950 text-white font-bold text-xs sm:text-sm hover:bg-neutral-800 transition-all shadow-sm disabled:opacity-50 flex items-center justify-center gap-2 self-start sm:self-auto shrink-0 cursor-pointer"
         >
           {updateProfileMutation.isPending ? (
             'Saving Profile...'
           ) : (
             <>
-              <Check size={14} />
+              <Check size={16} />
               Save Profile Changes
             </>
           )}
@@ -163,53 +163,53 @@ export default function Profile() {
                 <Briefcase size={16} />
               </div>
               <div>
-                <h3 className="text-base font-extrabold text-neutral-950 tracking-tight">Career Targets & Positioning</h3>
-                <p className="text-xs text-neutral-500 font-mono">Market discovery alignment</p>
+                <h3 className="text-base font-extrabold text-neutral-950 tracking-tight">Career Targets &amp; Positioning</h3>
+                <p className="text-xs sm:text-sm text-neutral-600 font-mono">Market discovery alignment</p>
               </div>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-mono font-bold text-neutral-600 mb-1.5 uppercase">Full Name</label>
+                <label className="block text-xs font-mono font-bold text-neutral-700 mb-1.5 uppercase tracking-wider">Full Name</label>
                 <input
                   type="text"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Alex Chen"
-                  className="w-full px-4 py-2.5 rounded-xl border border-neutral-200 bg-white text-xs font-medium focus:border-neutral-950 focus:outline-none transition-all"
+                  className="w-full px-4 py-2.5 rounded-xl border border-neutral-300 bg-white text-sm font-medium focus:border-neutral-950 focus:outline-none transition-all text-neutral-950"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-mono font-bold text-neutral-600 mb-1.5 uppercase">Target Role Title</label>
+                <label className="block text-xs font-mono font-bold text-neutral-700 mb-1.5 uppercase tracking-wider">Target Role Title</label>
                 <input
                   type="text"
                   value={role}
                   onChange={(e) => setRole(e.target.value)}
-                  placeholder="e.g. AI Research Engineer"
-                  className="w-full px-4 py-2.5 rounded-xl border border-neutral-200 bg-white text-xs font-medium focus:border-neutral-950 focus:outline-none transition-all"
+                  placeholder="e.g. AI Systems Engineer"
+                  className="w-full px-4 py-2.5 rounded-xl border border-neutral-300 bg-white text-sm font-medium focus:border-neutral-950 focus:outline-none transition-all text-neutral-950"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-mono font-bold text-neutral-600 mb-1.5 uppercase">Target Location</label>
+                <label className="block text-xs font-mono font-bold text-neutral-700 mb-1.5 uppercase tracking-wider">Target Location</label>
                 <input
                   type="text"
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
-                  placeholder="e.g. San Francisco / Remote"
-                  className="w-full px-4 py-2.5 rounded-xl border border-neutral-200 bg-white text-xs font-medium focus:border-neutral-950 focus:outline-none transition-all"
+                  placeholder="e.g. San Francisco"
+                  className="w-full px-4 py-2.5 rounded-xl border border-neutral-300 bg-white text-sm font-medium focus:border-neutral-950 focus:outline-none transition-all text-neutral-950"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-mono font-bold text-neutral-600 mb-1.5 uppercase">Phone / Contact</label>
+                <label className="block text-xs font-mono font-bold text-neutral-700 mb-1.5 uppercase tracking-wider">Phone / Contact</label>
                 <input
                   type="text"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder="+1 (555) 019-2834"
-                  className="w-full px-4 py-2.5 rounded-xl border border-neutral-200 bg-white text-xs font-medium focus:border-neutral-950 focus:outline-none transition-all"
+                  className="w-full px-4 py-2.5 rounded-xl border border-neutral-300 bg-white text-sm font-medium focus:border-neutral-950 focus:outline-none transition-all text-neutral-950"
                 />
               </div>
             </div>
@@ -222,31 +222,31 @@ export default function Profile() {
                 <Github size={16} />
               </div>
               <div>
-                <h3 className="text-base font-extrabold text-neutral-950 tracking-tight">Public Profiles & Links</h3>
-                <p className="text-xs text-neutral-500 font-mono">Proof of work validation</p>
+                <h3 className="text-base font-extrabold text-neutral-950 tracking-tight">Public Profiles &amp; Links</h3>
+                <p className="text-xs sm:text-sm text-neutral-600 font-mono">Proof of work validation</p>
               </div>
             </div>
 
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-mono font-bold text-neutral-600 mb-1.5 uppercase">GitHub Profile URL</label>
+                <label className="block text-xs font-mono font-bold text-neutral-700 mb-1.5 uppercase tracking-wider">GitHub Profile URL</label>
                 <input
                   type="text"
                   value={githubLink}
                   onChange={(e) => setGithubLink(e.target.value)}
                   placeholder="https://github.com/alexchen"
-                  className="w-full px-4 py-2.5 rounded-xl border border-neutral-200 bg-white text-xs font-mono focus:border-neutral-950 focus:outline-none transition-all"
+                  className="w-full px-4 py-2.5 rounded-xl border border-neutral-300 bg-white text-sm font-mono focus:border-neutral-950 focus:outline-none transition-all text-neutral-950"
                 />
               </div>
 
               <div>
-                <label className="block text-xs font-mono font-bold text-neutral-600 mb-1.5 uppercase">LinkedIn Profile URL</label>
+                <label className="block text-xs font-mono font-bold text-neutral-700 mb-1.5 uppercase tracking-wider">LinkedIn Profile URL</label>
                 <input
                   type="text"
                   value={linkedinLink}
                   onChange={(e) => setLinkedinLink(e.target.value)}
                   placeholder="https://linkedin.com/in/alexchen"
-                  className="w-full px-4 py-2.5 rounded-xl border border-neutral-200 bg-white text-xs font-mono focus:border-neutral-950 focus:outline-none transition-all"
+                  className="w-full px-4 py-2.5 rounded-xl border border-neutral-300 bg-white text-sm font-mono focus:border-neutral-950 focus:outline-none transition-all text-neutral-950"
                 />
               </div>
             </div>

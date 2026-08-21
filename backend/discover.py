@@ -31,7 +31,9 @@ logging.getLogger("httpx").setLevel(logging.WARNING)
 _client = AsyncOpenAI(base_url="https://openrouter.ai/api/v1", api_key=os.getenv("OPENROUTER_API_KEY"))
 MODEL_JD_EXTRACTOR = os.getenv("MODEL_JD_EXTRACTOR", os.getenv("OPENROUTER_MODEL", "google/gemini-2.5-flash-lite"))
 MODEL_DISCOVER_ADVISOR = os.getenv("MODEL_DISCOVER_ADVISOR", os.getenv("OPENROUTER_MODEL", "google/gemini-2.5-flash"))
-JD_TTL = 30 * 60
+JD_TTL = int(os.getenv("CACHE_TTL_JD", str(30 * 60)))       # Default: 30 mins
+INTEL_TTL = int(os.getenv("CACHE_TTL_INTEL", str(7 * 60)))  # Default: 7 mins
+CARD_TTL = int(os.getenv("CACHE_TTL_CARD", "3600"))         # Default: 1 hour
 
 SYSTEM = (
     "You are a ruthless career analyst. Binary, objective, zero encouragement. "
@@ -267,7 +269,7 @@ async def generate_cards(
                     return json.loads(cached)
             intel = await _fetch_company_intel(role, original_c, location)
             if rc:
-                await rc.setex(key, 3600, intel.model_dump_json())
+                await rc.setex(key, INTEL_TTL, intel.model_dump_json())
             return intel.model_dump()
             
         intel, (jd_text, jd_skills, from_cache) = await asyncio.gather(
@@ -282,7 +284,7 @@ async def generate_cards(
         card["retrieved_at"] = datetime.datetime.utcnow().isoformat()
         card["from_cache"] = False
         if rc and card:
-            await rc.setex(card_key, 3600, json.dumps(card))
+            await rc.setex(card_key, CARD_TTL, json.dumps(card))
         return (card,) + card_tuple[1:]
 
     tasks = []

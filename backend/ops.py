@@ -71,8 +71,9 @@ async def get_latest_pricing(redis_client=None):
             _PRICING.update(new_pricing)
 
             # Store in Redis (24-hour TTL)
+            pricing_ttl = int(os.getenv("CACHE_TTL_PRICING", "86400"))  # Default: 24 hours
             if redis_client:
-                await redis_client.setex(key, 86400, json.dumps({k: list(v) for k, v in new_pricing.items()}))
+                await redis_client.setex(key, pricing_ttl, json.dumps({k: list(v) for k, v in new_pricing.items()}))
     except Exception as e:
         print(f"[cost] live pricing fetch failed: {e}")
 
@@ -81,7 +82,7 @@ def log_llm_cost(op: str, model: str, response):
     try:
         u = getattr(response, "usage", None)
         if not u:
-            print(f"[cost] {op} | {model} | in=0 out=0 | ₹0.0000")
+            print(f"[cost] {op} | {model} | in=0 out=0 | INR 0.0000")
             return 0
 
         rates = _PRICING.get(model)
@@ -90,16 +91,19 @@ def log_llm_cost(op: str, model: str, response):
             rates = next((v for k, v in _PRICING.items() if k.endswith(model) or model.endswith(k)), None)
 
         if rates is None:
-            print(f"[cost] {op} | {model} (unindexed model) | in={u.prompt_tokens} out={u.completion_tokens} | ₹0.0000")
+            print(f"[cost] {op} | {model} (unindexed model) | in={u.prompt_tokens} out={u.completion_tokens} | INR 0.0000")
             return 0
 
         in_rate, out_rate = rates
         cost = ((u.prompt_tokens / 1_000_000) * in_rate +
                 (u.completion_tokens / 1_000_000) * out_rate) * 90
-        print(f"[cost] {op} | {model} | in={u.prompt_tokens} out={u.completion_tokens} | ₹{cost:.4f}")
+                
         ctx_list = current_request_cost.get()
         if ctx_list is not None:
             ctx_list[0] += cost
+            
+        print(f"[cost] {op} | {model} | in={u.prompt_tokens} out={u.completion_tokens} | INR {cost:.4f}")
+        
         return cost
     except Exception as e:
         print(f"[cost] log failed: {e}")

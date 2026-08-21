@@ -73,7 +73,7 @@ export default function Ingest() {
         headers: { "Content-Type": "multipart/form-data" }
       });
       const parsedProfile = res.data;
-      
+
       setFormData((prev) => ({
         ...prev,
         profile: {
@@ -111,7 +111,7 @@ export default function Ingest() {
   const handleAnswerChange = (questionId, value) => {
     setFormData((prev) => ({
       ...prev,
-      personality_answers: prev.personality_answers.map(ans => 
+      personality_answers: prev.personality_answers.map(ans =>
         ans.id === questionId ? { ...ans, score: value } : ans
       )
     }));
@@ -201,14 +201,16 @@ export default function Ingest() {
     <div className="min-h-screen bg-surface px-4 py-24">
       <div className="w-full max-w-2xl mx-auto animate-fade-in space-y-12">
         <div className="text-center">
-          <div className="w-12 h-12 bg-black text-white rounded-xl flex items-center justify-center mx-auto mb-4 shadow-xl shadow-black/10">
-            <Cpu size={20} />
+          <div className="flex justify-center mb-4">
+            <div className="w-14 h-14 rounded-2xl bg-neutral-950 flex items-center justify-center p-2 shadow-md border border-neutral-800">
+              <img src="/horizon-logo.png" alt="Horizon" className="w-full h-full object-contain" />
+            </div>
           </div>
           <h1 className="text-3xl font-bold tracking-tight">
             Initialize Horizon.
           </h1>
           <p className="text-neutral-500 mt-2">
-            Construct your digital twin.
+            Create your Horizon profile
           </p>
         </div>
 
@@ -219,20 +221,20 @@ export default function Ingest() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-neutral-700 mb-1">Email</label>
-                <input 
-                  type="email" 
-                  value={formData.email} 
-                  onChange={(e) => setFormData({...formData, email: e.target.value})} 
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="w-full px-4 py-2.5 rounded-xl border border-neutral-300 focus:border-neutral-950 focus:ring-1 focus:ring-neutral-950 outline-none transition-all"
                   placeholder="name@example.com"
                 />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-neutral-700 mb-1">Password</label>
-                <input 
-                  type="password" 
-                  value={formData.password} 
-                  onChange={(e) => setFormData({...formData, password: e.target.value})} 
+                <input
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="w-full px-4 py-2.5 rounded-xl border border-neutral-300 focus:border-neutral-950 focus:ring-1 focus:ring-neutral-950 outline-none transition-all"
                   placeholder="••••••••"
                 />
@@ -243,7 +245,7 @@ export default function Ingest() {
           {/* Resume Upload Section */}
           <div className="bg-white p-8 rounded-3xl shadow-sm border border-neutral-200/60">
             <h2 className="text-xl font-bold mb-4">Upload Resume</h2>
-            <div 
+            <div
               className="border-2 border-dashed border-neutral-300 rounded-2xl p-8 text-center hover:border-neutral-950 hover:bg-neutral-50 transition-all cursor-pointer"
               onClick={() => fileInputRef.current?.click()}
             >
@@ -251,11 +253,11 @@ export default function Ingest() {
               <p className="text-sm font-medium text-neutral-700">
                 {resumeUploading ? "Parsing resume..." : resumeUploaded ? "Resume uploaded successfully! Click to replace." : "Click or drag PDF to upload"}
               </p>
-              <input 
-                type="file" 
-                ref={fileInputRef} 
-                onChange={handleFileUpload} 
-                className="hidden" 
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                className="hidden"
                 accept=".pdf"
               />
             </div>
@@ -267,20 +269,20 @@ export default function Ingest() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-semibold text-neutral-700 mb-1">Target Role</label>
-                <input 
-                  type="text" 
-                  value={formData.profile.preferences.role} 
-                  onChange={(e) => handlePreferenceChange('role', e.target.value)} 
+                <input
+                  type="text"
+                  value={formData.profile.preferences.role}
+                  onChange={(e) => handlePreferenceChange('role', e.target.value)}
                   className="w-full px-4 py-2.5 rounded-xl border border-neutral-300 focus:border-neutral-950 focus:ring-1 focus:ring-neutral-950 outline-none transition-all"
                   placeholder="e.g. Senior Software Engineer"
                 />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-neutral-700 mb-1">Target Location</label>
-                <input 
-                  type="text" 
-                  value={formData.profile.preferences.location} 
-                  onChange={(e) => handlePreferenceChange('location', e.target.value)} 
+                <input
+                  type="text"
+                  value={formData.profile.preferences.location}
+                  onChange={(e) => handlePreferenceChange('location', e.target.value)}
                   className="w-full px-4 py-2.5 rounded-xl border border-neutral-300 focus:border-neutral-950 focus:ring-1 focus:ring-neutral-950 outline-none transition-all"
                   placeholder="e.g. San Francisco, CA"
                 />
@@ -292,7 +294,7 @@ export default function Ingest() {
           <div className="bg-white p-8 rounded-3xl shadow-sm border border-neutral-200/60">
             <h2 className="text-xl font-bold mb-2">Personality Assessment</h2>
             <p className="text-sm text-neutral-500 mb-6">Answer intuitively. This shapes your agent's negotiation style.</p>
-            
+
             <div className="space-y-8">
               {questions.map((q) => {
                 const answer = formData.personality_answers.find(a => a.id === q.id);
@@ -309,11 +311,10 @@ export default function Ingest() {
                             key={val}
                             type="button"
                             onClick={() => handleAnswerChange(q.id, val)}
-                            className={`w-8 h-8 rounded-full border-2 transition-all cursor-pointer ${
-                              value === val 
-                                ? 'border-neutral-950 bg-neutral-950 text-white' 
+                            className={`w-8 h-8 rounded-full border-2 transition-all cursor-pointer ${value === val
+                                ? 'border-neutral-950 bg-neutral-950 text-white'
                                 : 'border-neutral-300 text-transparent hover:border-neutral-400'
-                            }`}
+                              }`}
                           />
                         ))}
                       </div>
@@ -327,7 +328,7 @@ export default function Ingest() {
 
           {/* Submit Action */}
           <div className="pt-4">
-            <button 
+            <button
               onClick={handleRequestOtp}
               disabled={loading}
               className="w-full py-4 rounded-xl bg-black text-white font-bold text-lg hover:bg-neutral-800 transition-all shadow-md disabled:opacity-70 flex items-center justify-center gap-2"

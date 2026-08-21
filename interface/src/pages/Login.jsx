@@ -39,9 +39,14 @@ export default function Login() {
   return (
     <div className="min-h-screen bg-white flex items-center justify-center px-4 sm:px-6 pt-20 pb-12">
       <div className="w-full max-w-sm p-8 sm:p-10 rounded-3xl bg-neutral-50/60 border border-neutral-200/80 shadow-2xs">
-        
+
         {/* Title */}
         <div className="text-center mb-8">
+          <div className="flex justify-center mb-4">
+            <div className="w-14 h-14 rounded-2xl bg-neutral-950 flex items-center justify-center p-2 shadow-md border border-neutral-800">
+              <img src="/horizon-logo.png" alt="Horizon" className="w-full h-full object-contain" />
+            </div>
+          </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-neutral-950">
             Welcome back
           </h1>
@@ -86,7 +91,7 @@ export default function Login() {
             disabled={loading}
             className="mt-2 bg-neutral-950 text-white py-3 rounded-full text-xs sm:text-sm font-semibold hover:bg-neutral-800 transition-all disabled:opacity-50 shadow-sm"
           >
-            {loading ? "Signing in..." : "Sign In &rarr;"}
+            {loading ? "Signing in..." : "Sign In"}
           </button>
         </form>
 
@@ -94,7 +99,7 @@ export default function Login() {
         <p className="text-xs font-mono text-neutral-500 text-center mt-6">
           Don’t have an account?{' '}
           <Link to="/ingest" className="text-neutral-950 font-bold hover:underline">
-            Initialize
+            Sign Up
           </Link>
         </p>
 
